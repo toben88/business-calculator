@@ -1,8 +1,9 @@
 # Data files
-data/businesses.db
-data/businesses.json
 data/businesses.json.backup
 data/debug.log
+
+# Keep the database in git
+# data/businesses.db will be tracked
 
 # Backups
 v1/
