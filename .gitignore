@@ -3,8 +3,8 @@ data/businesses.json.backup
 data/debug.log
 input.csv
 
-# Database is tracked in git
-# data/businesses.db - committed with starter data
+# Database is tracked in git - includes starter data
+# data/businesses.db is committed to provide initial example data
 
 # Backups
 v1/
