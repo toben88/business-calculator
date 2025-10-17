@@ -1,6 +1,7 @@
 # Data files - exclude runtime/temporary data
 data/businesses.json.backup
 data/debug.log
+input.csv
 
 # Database is tracked in git
 # data/businesses.db - committed with starter data
