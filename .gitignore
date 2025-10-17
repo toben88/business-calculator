@@ -1,0 +1,25 @@
+# Data files
+data/businesses.db
+data/businesses.json
+data/businesses.json.backup
+data/debug.log
+
+# Backups
+v1/
+
+# Temporary files
+*.tmp
+*.log
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# PHP temporary files
+*.php~
