@@ -7,6 +7,127 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+// ============================================
+// SECURITY: SESSION AND CSRF PROTECTION
+// ============================================
+
+// Configure secure session settings for HTTPS
+ini_set('session.cookie_httponly', 1);  // Prevent JavaScript access to session cookie
+ini_set('session.cookie_secure', 1);     // Only send cookie over HTTPS
+ini_set('session.cookie_samesite', 'Strict'); // Prevent CSRF attacks
+ini_set('session.use_strict_mode', 1);   // Reject uninitialized session IDs
+
+// Start session
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Generate CSRF token
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// ============================================
+// SECURITY: HTTP HEADERS
+// ============================================
+
+// Prevent clickjacking
+header('X-Frame-Options: SAMEORIGIN');
+
+// Prevent MIME-type sniffing
+header('X-Content-Type-Options: nosniff');
+
+// Enable XSS protection (legacy but still useful)
+header('X-XSS-Protection: 1; mode=block');
+
+// Referrer policy
+header('Referrer-Policy: strict-origin-when-cross-origin');
+
+// Content Security Policy
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';");
+
+// Strict Transport Security (HSTS) - forces HTTPS
+header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+
+// ============================================
+// SECURITY: RATE LIMITING
+// ============================================
+
+function checkRateLimit() {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $now = time();
+    $rate_limit_window = 60; // 60 seconds
+    $max_requests = 30; // 30 requests per minute
+
+    if (!isset($_SESSION['rate_limit'])) {
+        $_SESSION['rate_limit'] = [];
+    }
+
+    // Clean old entries
+    $_SESSION['rate_limit'] = array_filter($_SESSION['rate_limit'], function($timestamp) use ($now, $rate_limit_window) {
+        return ($now - $timestamp) < $rate_limit_window;
+    });
+
+    // Check limit
+    if (count($_SESSION['rate_limit']) >= $max_requests) {
+        http_response_code(429);
+        die('Rate limit exceeded. Please wait a moment before trying again.');
+    }
+
+    // Add current request
+    $_SESSION['rate_limit'][] = $now;
+}
+
+// ============================================
+// SECURITY: INPUT VALIDATION
+// ============================================
+
+function validateAndSanitizeBusinessData($post_data) {
+    $errors = [];
+
+    // Business name: max 200 chars, strip HTML tags
+    $business_name = isset($post_data['business_name']) ? strip_tags(trim($post_data['business_name'])) : '';
+    if (strlen($business_name) > 200) {
+        $errors[] = "Business name too long (max 200 characters)";
+    }
+    if (empty($business_name)) {
+        $errors[] = "Business name cannot be empty";
+    }
+
+    // Numeric fields with range validation
+    $numeric_fields = [
+        'sde' => ['min' => 0, 'max' => 1000000000, 'default' => 500000],
+        'price' => ['min' => 0, 'max' => 1000000000, 'default' => 1750000],
+        'optional_salary' => ['min' => 0, 'max' => 10000000, 'default' => 125000],
+        'extra_costs' => ['min' => 0, 'max' => 10000000, 'default' => 0],
+        'capex' => ['min' => 0, 'max' => 10000000, 'default' => 0],
+        'consulting_fee' => ['min' => 0, 'max' => 10000000, 'default' => 0],
+        'pct_down_payment' => ['min' => 0, 'max' => 100, 'default' => 10],
+        'pct_seller_carry' => ['min' => 0, 'max' => 100, 'default' => 10],
+        'loan_fee' => ['min' => 0, 'max' => 10000000, 'default' => 13485],
+        'closing_costs' => ['min' => 0, 'max' => 10000000, 'default' => 15000],
+        'other_fees' => ['min' => 0, 'max' => 10000000, 'default' => 15000],
+        'seller_duration' => ['min' => 1, 'max' => 600, 'default' => 120],
+        'seller_interest' => ['min' => 0, 'max' => 100, 'default' => 7],
+        'sba_duration' => ['min' => 1, 'max' => 600, 'default' => 120],
+        'sba_interest' => ['min' => 0, 'max' => 100, 'default' => 10],
+    ];
+
+    $sanitized = ['business_name' => $business_name];
+
+    foreach ($numeric_fields as $field => $config) {
+        $value = floatval($post_data[$field] ?? $config['default']);
+
+        if ($value < $config['min'] || $value > $config['max']) {
+            $errors[] = ucfirst(str_replace('_', ' ', $field)) . " must be between {$config['min']} and {$config['max']}";
+        }
+
+        $sanitized[$field] = $value;
+    }
+
+    return ['data' => $sanitized, 'errors' => $errors];
+}
+
 // Initialize database
 require_once __DIR__ . '/Database.php';
 $db = new Database();
@@ -21,11 +142,20 @@ $loadedData = [];
 // ============================================
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Security: Check rate limit
+    checkRateLimit();
+
+    // Security: Validate CSRF token
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        http_response_code(403);
+        die('Security validation failed. Please refresh the page and try again.');
+    }
+
     $action = $_POST['action_type'] ?? '';
 
-    // Debug logging
-    $debugInfo = "Action: $action | POST data received: " . print_r($_POST, true);
-    file_put_contents(__DIR__ . '/data/debug.log', date('Y-m-d H:i:s') . " - $debugInfo\n", FILE_APPEND);
+    // Security: Disabled debug logging in production (comment out for development)
+    // $debugInfo = "Action: $action | POST data received: " . print_r($_POST, true);
+    // file_put_contents(__DIR__ . '/data/debug.log', date('Y-m-d H:i:s') . " - $debugInfo\n", FILE_APPEND);
 
     if ($action === 'load' && !empty($_POST['business_id'])) {
         // Load selected business
@@ -38,64 +168,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     elseif ($action === 'save' && !empty($_POST['business_id'])) {
-        // Update existing business
-        $businessData = [
-            'business_name' => $_POST['business_name'] ?? 'Untitled Business',
-            'sde' => $_POST['sde'] ?? 500000,
-            'price' => $_POST['price'] ?? 1750000,
-            'optional_salary' => $_POST['optional_salary'] ?? 125000,
-            'extra_costs' => $_POST['extra_costs'] ?? 0,
-            'capex' => $_POST['capex'] ?? 0,
-            'consulting_fee' => $_POST['consulting_fee'] ?? 0,
-            'pct_down_payment' => $_POST['pct_down_payment'] ?? 10,
-            'pct_seller_carry' => $_POST['pct_seller_carry'] ?? 10,
-            'loan_fee' => $_POST['loan_fee'] ?? 13485,
-            'closing_costs' => $_POST['closing_costs'] ?? 15000,
-            'other_fees' => $_POST['other_fees'] ?? 15000,
-            'seller_duration' => $_POST['seller_duration'] ?? 120,
-            'seller_interest' => $_POST['seller_interest'] ?? 7,
-            'sba_duration' => $_POST['sba_duration'] ?? 120,
-            'sba_interest' => $_POST['sba_interest'] ?? 10
-        ];
+        // Update existing business with validation
+        $validation = validateAndSanitizeBusinessData($_POST);
 
-        $id = intval($_POST['business_id']);
-        if ($db->updateBusiness($id, $businessData)) {
-            $message = "Updated: " . htmlspecialchars($businessData['business_name']);
-            $messageType = 'success';
-            $selectedBusinessId = $id;
-            $loadedData = $businessData;
+        if (!empty($validation['errors'])) {
+            $message = "Validation error: " . implode(', ', $validation['errors']);
+            $messageType = 'error';
+        } else {
+            $id = intval($_POST['business_id']);
+            if ($db->updateBusiness($id, $validation['data'])) {
+                $message = "Updated: " . htmlspecialchars($validation['data']['business_name']);
+                $messageType = 'success';
+                $selectedBusinessId = $id;
+                $loadedData = $validation['data'];
+            }
         }
     }
     elseif ($action === 'save_new') {
-        // Save as new business
-        $businessData = [
-            'business_name' => $_POST['business_name'] ?? 'Untitled Business',
-            'sde' => $_POST['sde'] ?? 500000,
-            'price' => $_POST['price'] ?? 1750000,
-            'optional_salary' => $_POST['optional_salary'] ?? 125000,
-            'extra_costs' => $_POST['extra_costs'] ?? 0,
-            'capex' => $_POST['capex'] ?? 0,
-            'consulting_fee' => $_POST['consulting_fee'] ?? 0,
-            'pct_down_payment' => $_POST['pct_down_payment'] ?? 10,
-            'pct_seller_carry' => $_POST['pct_seller_carry'] ?? 10,
-            'loan_fee' => $_POST['loan_fee'] ?? 13485,
-            'closing_costs' => $_POST['closing_costs'] ?? 15000,
-            'other_fees' => $_POST['other_fees'] ?? 15000,
-            'seller_duration' => $_POST['seller_duration'] ?? 120,
-            'seller_interest' => $_POST['seller_interest'] ?? 7,
-            'sba_duration' => $_POST['sba_duration'] ?? 120,
-            'sba_interest' => $_POST['sba_interest'] ?? 10
-        ];
+        // Save as new business with validation
+        $validation = validateAndSanitizeBusinessData($_POST);
 
-        if (empty($businessData['business_name']) || trim($businessData['business_name']) === '') {
-            $message = "Error: Business name cannot be empty";
+        if (!empty($validation['errors'])) {
+            $message = "Validation error: " . implode(', ', $validation['errors']);
             $messageType = 'error';
         } else {
-            $newId = $db->createBusiness($businessData);
-            $message = "Saved new business: " . htmlspecialchars($businessData['business_name']);
+            $newId = $db->createBusiness($validation['data']);
+            $message = "Saved new business: " . htmlspecialchars($validation['data']['business_name']);
             $messageType = 'success';
             $selectedBusinessId = $newId;
-            $loadedData = $businessData;
+            $loadedData = $validation['data'];
         }
     }
     elseif ($action === 'delete' && !empty($_POST['business_id'])) {
@@ -719,6 +820,23 @@ $allBusinesses = $db->getAllBusinesses();
             validationEl.className = 'validation-check ' + (validationPass ? 'validation-pass' : 'validation-fail');
         }
 
+        // Handle business dropdown selection
+        function loadBusiness() {
+            const select = document.getElementById('business_id');
+            if (select.value) {
+                const form = document.getElementById('mainForm');
+                let actionInput = document.querySelector('input[name="action_type"]');
+                if (!actionInput) {
+                    actionInput = document.createElement('input');
+                    actionInput.type = 'hidden';
+                    actionInput.name = 'action_type';
+                    form.appendChild(actionInput);
+                }
+                actionInput.value = 'load';
+                form.submit();
+            }
+        }
+
         // Add event listeners when DOM is loaded
         document.addEventListener('DOMContentLoaded', function() {
             const inputs = [
@@ -746,6 +864,8 @@ $allBusinesses = $db->getAllBusinesses();
         <div class="main-content">
             <div class="left-column">
                 <form method="POST" action="" id="mainForm">
+                <!-- CSRF Protection -->
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
 
                 <!-- Record Manager -->
                 <?php if ($message): ?>
@@ -757,7 +877,7 @@ $allBusinesses = $db->getAllBusinesses();
                 <div class="record-manager">
                     <div class="record-manager-title">Business Records</div>
                     <div class="record-controls">
-                        <select name="business_id" id="business_id" onchange="if(this.value) { var form = this.form; var btn = document.createElement('input'); btn.type='hidden'; btn.name='action_type'; btn.value='load'; form.appendChild(btn); form.submit(); }">
+                        <select name="business_id" id="business_id" onchange="loadBusiness()">
                             <option value="">-- New Business --</option>
                             <?php foreach ($allBusinesses as $biz): ?>
                             <option value="<?php echo $biz['id']; ?>" <?php echo ($selectedBusinessId == $biz['id']) ? 'selected' : ''; ?>>
