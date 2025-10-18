@@ -1137,7 +1137,7 @@ $allBusinesses = $db->getAllBusinesses();
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div style="background-color: white; padding: 12px; border-radius: 4px; border: 1px solid #ddd;">
-                        <div style="font-size: 10px; color: #666; margin-bottom: 4px;">TOTAL TO SELLER (5 YEARS)</div>
+                        <div style="font-size: 10px; color: #666; margin-bottom: 4px;">TOTAL TO SELLER (5 YEARS with balloon)</div>
                         <div style="font-size: 18px; font-weight: bold; color: #5d4037;">
                             $<?php echo number_format($total_seller_5yr, 0); ?>
                         </div>
