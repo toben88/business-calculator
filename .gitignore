@@ -13,6 +13,10 @@ v1/
 *.tmp
 *.log
 
+# Flutter and Desktop app folders
+desktop_app/
+flutter_webapp/
+
 # IDE files
 .vscode/
 .idea/

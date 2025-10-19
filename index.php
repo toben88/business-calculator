@@ -11,9 +11,9 @@ ini_set('display_errors', 1);
 // SECURITY: SESSION AND CSRF PROTECTION
 // ============================================
 
-// Configure secure session settings for HTTPS
+// Configure secure session settings
 ini_set('session.cookie_httponly', 1);  // Prevent JavaScript access to session cookie
-ini_set('session.cookie_secure', 1);     // Only send cookie over HTTPS
+// Removed session.cookie_secure to allow HTTP (local development)
 ini_set('session.cookie_samesite', 'Strict'); // Prevent CSRF attacks
 ini_set('session.use_strict_mode', 1);   // Reject uninitialized session IDs
 
@@ -46,8 +46,8 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 // Content Security Policy
 header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';");
 
-// Strict Transport Security (HSTS) - forces HTTPS
-header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+// Strict Transport Security (HSTS) - removed to allow HTTP (local development)
+// header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
 
 // ============================================
 // SECURITY: RATE LIMITING
@@ -782,13 +782,14 @@ $allBusinesses = $db->getAllBusinesses();
                 }
             }
 
-            // Update Total to Seller (5 Years)
-            const seller5yrEl = document.querySelector('.results-section > div:nth-child(4) > div:nth-child(1)');
-            if (seller5yrEl) {
-                const valueEl = seller5yrEl.querySelector('div:nth-child(2)');
-                const detailEl = seller5yrEl.querySelector('div:nth-child(3)');
-                if (valueEl) valueEl.textContent = '$' + Math.round(totalSeller5yr).toLocaleString('en-US');
-                if (detailEl) detailEl.innerHTML =
+            // Update Total to Seller (5 Years) - using direct IDs
+            const seller5yrValueEl = document.getElementById('total_seller_5yr_value');
+            const seller5yrDetailsEl = document.getElementById('total_seller_5yr_details');
+            if (seller5yrValueEl) {
+                seller5yrValueEl.textContent = '$' + Math.round(totalSeller5yr).toLocaleString('en-US');
+            }
+            if (seller5yrDetailsEl) {
+                seller5yrDetailsEl.innerHTML =
                     'Down: $' + Math.round(downPayment).toLocaleString('en-US') + '<br>' +
                     'SBA Loan (Full): $' + Math.round(loan).toLocaleString('en-US') + '<br>' +
                     'Seller Carry Principal: $' + Math.round((sellerMonthlyPayment * 60) - seller5yrInterest).toLocaleString('en-US') + '<br>' +
@@ -797,13 +798,14 @@ $allBusinesses = $db->getAllBusinesses();
                     'Consulting: $' + Math.round(consultingFee).toLocaleString('en-US');
             }
 
-            // Update Total to Seller (10 Years)
-            const seller10yrEl = document.querySelector('.results-section > div:nth-child(4) > div:nth-child(2)');
-            if (seller10yrEl) {
-                const valueEl = seller10yrEl.querySelector('div:nth-child(2)');
-                const detailEl = seller10yrEl.querySelector('div:nth-child(3)');
-                if (valueEl) valueEl.textContent = '$' + Math.round(totalSeller10yr).toLocaleString('en-US');
-                if (detailEl) detailEl.innerHTML =
+            // Update Total to Seller (10 Years) - using direct IDs
+            const seller10yrValueEl = document.getElementById('total_seller_10yr_value');
+            const seller10yrDetailsEl = document.getElementById('total_seller_10yr_details');
+            if (seller10yrValueEl) {
+                seller10yrValueEl.textContent = '$' + Math.round(totalSeller10yr).toLocaleString('en-US');
+            }
+            if (seller10yrDetailsEl) {
+                seller10yrDetailsEl.innerHTML =
                     'Down: $' + Math.round(downPayment).toLocaleString('en-US') + '<br>' +
                     'SBA Loan (Full): $' + Math.round(loan).toLocaleString('en-US') + '<br>' +
                     'Seller Carry Principal: $' + Math.round((sellerMonthlyPayment * Math.min(120, sellerDuration)) - seller10yrInterest).toLocaleString('en-US') + '<br>' +
@@ -1258,10 +1260,10 @@ $allBusinesses = $db->getAllBusinesses();
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div style="background-color: white; padding: 12px; border-radius: 4px; border: 1px solid #ddd;">
                         <div style="font-size: 10px; color: #666; margin-bottom: 4px;">TOTAL TO SELLER (5 YEARS with balloon)</div>
-                        <div style="font-size: 18px; font-weight: bold; color: #5d4037;">
+                        <div id="total_seller_5yr_value" style="font-size: 18px; font-weight: bold; color: #5d4037;">
                             $<?php echo number_format($total_seller_5yr, 0); ?>
                         </div>
-                        <div style="font-size: 9px; color: #888; margin-top: 6px;">
+                        <div id="total_seller_5yr_details" style="font-size: 9px; color: #888; margin-top: 6px;">
                             Down: $<?php echo number_format($down_payment, 0); ?><br>
                             SBA Loan (Full): $<?php echo number_format($loan, 0); ?><br>
                             Seller Carry Principal: $<?php echo number_format(($seller_monthly_payment * 60) - $seller_5yr_interest, 0); ?><br>
@@ -1273,10 +1275,10 @@ $allBusinesses = $db->getAllBusinesses();
 
                     <div style="background-color: white; padding: 12px; border-radius: 4px; border: 1px solid #ddd;">
                         <div style="font-size: 10px; color: #666; margin-bottom: 4px;">TOTAL TO SELLER (10 YEARS)</div>
-                        <div style="font-size: 18px; font-weight: bold; color: #5d4037;">
+                        <div id="total_seller_10yr_value" style="font-size: 18px; font-weight: bold; color: #5d4037;">
                             $<?php echo number_format($total_seller_10yr, 0); ?>
                         </div>
-                        <div style="font-size: 9px; color: #888; margin-top: 6px;">
+                        <div id="total_seller_10yr_details" style="font-size: 9px; color: #888; margin-top: 6px;">
                             Down: $<?php echo number_format($down_payment, 0); ?><br>
                             SBA Loan (Full): $<?php echo number_format($loan, 0); ?><br>
                             Seller Carry Principal: $<?php echo number_format(($seller_monthly_payment * min(120, $seller_duration)) - $seller_10yr_interest, 0); ?><br>
