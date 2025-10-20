@@ -996,7 +996,7 @@ $allBusinesses = $db->getAllBusinesses();
                     <input type="number" id="consulting_fee" name="consulting_fee" value="<?php echo htmlspecialchars($loadedData['consulting_fee'] ?? $_POST['consulting_fee'] ?? '0'); ?>" step="1">
                 </div>
 
-                <div class="section-title">Down Payment & Seller Carry</div>
+                <div class="section-title">Loan Info</div>
 
                 <div class="form-row">
                     <label>Down Payment:</label>
