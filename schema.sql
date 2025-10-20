@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS businesses (
     -- Financing Structure
     pct_down_payment REAL DEFAULT 10,
     pct_seller_carry REAL DEFAULT 10,
+    pct_junior_debt REAL DEFAULT 0,
     loan_fee REAL DEFAULT 13485,
     closing_costs REAL DEFAULT 15000,
     other_fees REAL DEFAULT 15000,
@@ -25,6 +26,8 @@ CREATE TABLE IF NOT EXISTS businesses (
     -- Loan Terms
     seller_duration INTEGER DEFAULT 120,
     seller_interest REAL DEFAULT 7,
+    junior_duration INTEGER DEFAULT 120,
+    junior_interest REAL DEFAULT 8,
     sba_duration INTEGER DEFAULT 120,
     sba_interest REAL DEFAULT 10
 );

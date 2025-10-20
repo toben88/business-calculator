@@ -2,24 +2,28 @@
 
 A comprehensive web-based tool for calculating business valuations, loan structures, and cash flow analysis for business acquisitions.
 
-Calculates the cashflow of a business being purchased for SBA loan with seller carry that has a 5 year balloon.
+Calculates the cashflow of a business being purchased using multiple financing sources including SBA loans, junior debt, and seller carry financing with balloon payment options.
 
 ## Features
 
 - **Business Valuation Analysis**
   - SDE (Seller's Discretionary Earnings) calculations
   - Price multiple analysis
-  - Cash flow projections
+  - Cash flow projections with detailed monthly breakdown
 
 - **Loan Structure Management**
   - SBA loan calculations with customizable terms
+  - Junior debt financing support
   - Seller financing options with balloon payment support
   - Down payment scenarios
+  - Real-time calculation updates
 
 - **Financial Metrics**
-  - Monthly and annual cash flow projections
-  - DSCR (Debt Service Coverage Ratio) calculation with color-coded indicators
+  - Monthly and annual cash flow projections with detailed breakdowns
+  - DSCR (Debt Service Coverage Ratio) calculation with color-coded indicators (includes all loan types)
   - ROI analysis
+  - Payment to seller calculations (5-year and 10-year scenarios)
+  - Price breakdown showing all financing components
 
 - **Data Management**
   - SQLite database for persistent storage

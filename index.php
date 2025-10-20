@@ -104,11 +104,14 @@ function validateAndSanitizeBusinessData($post_data) {
         'consulting_fee' => ['min' => 0, 'max' => 10000000, 'default' => 0],
         'pct_down_payment' => ['min' => 0, 'max' => 100, 'default' => 10],
         'pct_seller_carry' => ['min' => 0, 'max' => 100, 'default' => 10],
+        'pct_junior_debt' => ['min' => 0, 'max' => 100, 'default' => 0],
         'loan_fee' => ['min' => 0, 'max' => 10000000, 'default' => 13485],
         'closing_costs' => ['min' => 0, 'max' => 10000000, 'default' => 15000],
         'other_fees' => ['min' => 0, 'max' => 10000000, 'default' => 15000],
         'seller_duration' => ['min' => 1, 'max' => 600, 'default' => 120],
         'seller_interest' => ['min' => 0, 'max' => 100, 'default' => 7],
+        'junior_duration' => ['min' => 1, 'max' => 600, 'default' => 120],
+        'junior_interest' => ['min' => 0, 'max' => 100, 'default' => 8],
         'sba_duration' => ['min' => 1, 'max' => 600, 'default' => 120],
         'sba_interest' => ['min' => 0, 'max' => 100, 'default' => 10],
     ];
@@ -312,7 +315,7 @@ $allBusinesses = $db->getAllBusinesses();
 
         .loan-sections {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 15px;
             margin-top: 10px;
             position: relative;
@@ -663,11 +666,14 @@ $allBusinesses = $db->getAllBusinesses();
             const consultingFee = parseFloat(document.getElementById('consulting_fee').value) || 0;
             const pctDownPayment = parseFloat(document.getElementById('pct_down_payment').value) || 0;
             const pctSellerCarry = parseFloat(document.getElementById('pct_seller_carry').value) || 0;
+            const pctJuniorDebt = parseFloat(document.getElementById('pct_junior_debt').value) || 0;
             const loanFee = parseFloat(document.getElementById('loan_fee').value) || 0;
             const closingCosts = parseFloat(document.getElementById('closing_costs').value) || 0;
             const otherFees = parseFloat(document.getElementById('other_fees').value) || 0;
             const sellerDuration = parseInt(document.getElementById('seller_duration').value) || 120;
             const sellerInterest = parseFloat(document.getElementById('seller_interest').value) || 0;
+            const juniorDuration = parseInt(document.getElementById('junior_duration').value) || 120;
+            const juniorInterest = parseFloat(document.getElementById('junior_interest').value) || 0;
             const sbaDuration = parseInt(document.getElementById('sba_duration').value) || 120;
             const sbaInterest = parseFloat(document.getElementById('sba_interest').value) || 0;
 
@@ -675,18 +681,21 @@ $allBusinesses = $db->getAllBusinesses();
             const multiple = sde > 0 ? (price / sde).toFixed(2) : '0.00';
             document.getElementById('multiple').value = multiple;
 
-            // Calculate Down Payment and Seller Carry
+            // Calculate Down Payment, Seller Carry, and Junior Debt
             const downPayment = price * (pctDownPayment / 100);
             const sellerCarry = price * (pctSellerCarry / 100);
+            const juniorDebt = price * (pctJuniorDebt / 100);
             document.getElementById('down_payment').value = formatCurrency(downPayment);
             document.getElementById('seller_carry').value = formatCurrency(sellerCarry);
+            document.getElementById('junior_debt').value = formatCurrency(juniorDebt);
 
-            // Calculate loan amount
-            const loan = price - downPayment - sellerCarry;
+            // Calculate loan amount (SBA gets what's left after down, seller carry, and junior debt)
+            const loan = price - downPayment - sellerCarry - juniorDebt;
             const sbaLoanAmount = loan + loanFee + closingCosts + otherFees;
 
             // Update loan amounts in the form
             document.getElementById('seller_loan_amount').value = formatCurrency(sellerCarry);
+            document.getElementById('junior_loan_amount').value = formatCurrency(juniorDebt);
             document.getElementById('sba_loan_base').value = formatCurrency(loan);
             document.getElementById('sba_loan_amount').value = formatCurrency(sbaLoanAmount);
 
@@ -699,6 +708,15 @@ $allBusinesses = $db->getAllBusinesses();
             document.getElementById('seller_5yr_interest').value = formatCurrency(seller5yrInterest);
             document.getElementById('seller_10yr_interest').value = formatCurrency(seller10yrInterest);
 
+            // Calculate Junior Debt loan payments and interest
+            const juniorMonthlyPayment = calculateLoanPayment(juniorDebt, juniorInterest, juniorDuration);
+            const junior5yrInterest = calculateInterestPaid(juniorDebt, juniorInterest, juniorDuration, 60);
+            const junior10yrInterest = calculateInterestPaid(juniorDebt, juniorInterest, juniorDuration, 120);
+
+            document.getElementById('junior_monthly_payment').value = formatCurrency(juniorMonthlyPayment);
+            document.getElementById('junior_5yr_interest').value = formatCurrency(junior5yrInterest);
+            document.getElementById('junior_10yr_interest').value = formatCurrency(junior10yrInterest);
+
             // Calculate SBA loan payments and interest
             const sbaMonthlyPayment = calculateLoanPayment(sbaLoanAmount, sbaInterest, sbaDuration);
             const sba5yrInterest = calculateInterestPaid(sbaLoanAmount, sbaInterest, sbaDuration, 60);
@@ -708,39 +726,53 @@ $allBusinesses = $db->getAllBusinesses();
             document.getElementById('sba_5yr_interest').value = formatCurrency(sba5yrInterest);
             document.getElementById('sba_10yr_interest').value = formatCurrency(sba10yrInterest);
 
-            // Calculate balloon payment on seller carry loan
+            // Calculate balloon payments on seller carry and junior debt loans
             const sellerBalloon5yr = calculateRemainingBalance(sellerCarry, sellerInterest, sellerDuration, 60);
             const sellerBalloon10yr = calculateRemainingBalance(sellerCarry, sellerInterest, sellerDuration, 120);
+            const juniorBalloon5yr = calculateRemainingBalance(juniorDebt, juniorInterest, juniorDuration, 60);
+            const juniorBalloon10yr = calculateRemainingBalance(juniorDebt, juniorInterest, juniorDuration, 120);
 
-            // Calculate cashflow
-            const monthlyCashflow = (sde / 12) - sbaMonthlyPayment - sellerMonthlyPayment - (optionalSalary / 12) - (extraCosts / 12) - (capex / 12);
-            const annualCashflow = sde - (sbaMonthlyPayment * 12) - (sellerMonthlyPayment * 12) - optionalSalary - extraCosts - capex;
+            // Calculate cashflow (includes junior debt payment)
+            const monthlyCashflow = (sde / 12) - sbaMonthlyPayment - sellerMonthlyPayment - juniorMonthlyPayment - (optionalSalary / 12) - (extraCosts / 12) - (capex / 12);
+            const annualCashflow = sde - (sbaMonthlyPayment * 12) - (sellerMonthlyPayment * 12) - (juniorMonthlyPayment * 12) - optionalSalary - extraCosts - capex;
 
-            // Calculate DSCR (Debt Service Coverage Ratio)
+            // Calculate DSCR (Debt Service Coverage Ratio) - includes junior debt
             const netOperatingIncome = sde - optionalSalary - extraCosts - capex;
-            const totalDebtService = (sbaMonthlyPayment * 12) + (sellerMonthlyPayment * 12);
+            const totalDebtService = (sbaMonthlyPayment * 12) + (sellerMonthlyPayment * 12) + (juniorMonthlyPayment * 12);
             const dscr = totalDebtService > 0 ? netOperatingIncome / totalDebtService : 0;
 
-            // Total payments over 5 and 10 years
-            const totalPaid5yr = (sbaMonthlyPayment * 60) + (sellerMonthlyPayment * 60) + downPayment + (extraCosts * 5) + consultingFee + sellerBalloon5yr;
-            const totalPaid10yr = (sbaMonthlyPayment * 120) + (sellerMonthlyPayment * 120) + downPayment + (extraCosts * 10) + consultingFee;
+            // Total payments over 5 and 10 years (includes junior debt)
+            const totalPaid5yr = (sbaMonthlyPayment * 60) + (sellerMonthlyPayment * 60) + (juniorMonthlyPayment * 60) + downPayment + (extraCosts * 5) + consultingFee + sellerBalloon5yr + juniorBalloon5yr;
+            const totalPaid10yr = (sbaMonthlyPayment * 120) + (sellerMonthlyPayment * 120) + (juniorMonthlyPayment * 120) + downPayment + (extraCosts * 10) + consultingFee;
 
-            // Total to seller
-            // At 5 years: Down + Full SBA Loan + Seller Carry payments (5 years) + Seller Carry Balloon + Consulting
-            const totalSeller5yr = downPayment + loan + (sellerMonthlyPayment * 60) + sellerBalloon5yr + consultingFee;
+            // Total to seller - NOW INCLUDES JUNIOR DEBT
+            // At 5 years: Down + Full SBA Loan + Full Junior Debt + Seller Carry payments (5 years) + Seller Carry Balloon + Consulting
+            const totalSeller5yr = downPayment + loan + juniorDebt + (sellerMonthlyPayment * 60) + sellerBalloon5yr + consultingFee;
 
-            // At 10 years: Down + Full SBA Loan + Seller Carry payments (full duration) + Consulting
-            const totalSeller10yr = downPayment + loan + (sellerMonthlyPayment * Math.min(120, sellerDuration)) + consultingFee;
+            // At 10 years: Down + Full SBA Loan + Full Junior Debt + Seller Carry payments (full duration) + Consulting
+            const totalSeller10yr = downPayment + loan + juniorDebt + (sellerMonthlyPayment * Math.min(120, sellerDuration)) + consultingFee;
 
             // Update results section - Monthly Cashflow
-            const monthlyEl = document.querySelector('.results-section > div:nth-child(2) > div:nth-child(1)');
-            if (monthlyEl) {
-                monthlyEl.style.borderLeftColor = monthlyCashflow >= 0 ? '#2196F3' : '#f44336';
-                const monthlyValueEl = monthlyEl.querySelector('div:nth-child(2)');
-                if (monthlyValueEl) {
-                    monthlyValueEl.textContent = '$' + Math.round(monthlyCashflow).toLocaleString('en-US');
-                    monthlyValueEl.style.color = monthlyCashflow >= 0 ? '#1565c0' : '#c62828';
-                }
+            const monthlyCashflowContainer = document.getElementById('monthly_cashflow_container');
+            const monthlyCashflowValue = document.getElementById('monthly_cashflow_value');
+            const monthlyCashflowDetails = document.getElementById('monthly_cashflow_details');
+
+            if (monthlyCashflowContainer) {
+                monthlyCashflowContainer.style.borderLeftColor = monthlyCashflow >= 0 ? '#2196F3' : '#f44336';
+            }
+            if (monthlyCashflowValue) {
+                monthlyCashflowValue.textContent = '$' + Math.round(monthlyCashflow).toLocaleString('en-US');
+                monthlyCashflowValue.style.color = monthlyCashflow >= 0 ? '#1565c0' : '#c62828';
+            }
+            if (monthlyCashflowDetails) {
+                monthlyCashflowDetails.innerHTML =
+                    'SDE: $' + Math.round(sde / 12).toLocaleString('en-US') + '<br>' +
+                    'SBA Payment: -$' + Math.round(sbaMonthlyPayment).toLocaleString('en-US') + '<br>' +
+                    'Junior Debt Payment: -$' + Math.round(juniorMonthlyPayment).toLocaleString('en-US') + '<br>' +
+                    'Seller Payment: -$' + Math.round(sellerMonthlyPayment).toLocaleString('en-US') + '<br>' +
+                    'Salary: -$' + Math.round(optionalSalary / 12).toLocaleString('en-US') + '<br>' +
+                    'Extra Costs: -$' + Math.round(extraCosts / 12).toLocaleString('en-US') + '<br>' +
+                    'Capex: -$' + Math.round(capex / 12).toLocaleString('en-US');
             }
 
             // Update results section - Annual Cashflow
@@ -782,6 +814,33 @@ $allBusinesses = $db->getAllBusinesses();
                 }
             }
 
+            // Update Price Breakdown section
+            const priceBreakdownDown = document.getElementById('price_breakdown_down');
+            const priceBreakdownSba = document.getElementById('price_breakdown_sba');
+            const priceBreakdownJunior = document.getElementById('price_breakdown_junior');
+            const priceBreakdownSeller = document.getElementById('price_breakdown_seller');
+
+            if (priceBreakdownDown) {
+                const downPct = price > 0 ? ((downPayment / price) * 100).toFixed(1) : '0.0';
+                priceBreakdownDown.innerHTML = '$' + Math.round(downPayment).toLocaleString('en-US') +
+                    '<span style="font-size: 10px; color: #888; margin-left: 8px;">' + downPct + '%</span>';
+            }
+            if (priceBreakdownSba) {
+                const sbaPct = price > 0 ? ((loan / price) * 100).toFixed(1) : '0.0';
+                priceBreakdownSba.innerHTML = '$' + Math.round(loan).toLocaleString('en-US') +
+                    '<span style="font-size: 10px; color: #888; margin-left: 8px;">' + sbaPct + '%</span>';
+            }
+            if (priceBreakdownJunior) {
+                const juniorPct = price > 0 ? ((juniorDebt / price) * 100).toFixed(1) : '0.0';
+                priceBreakdownJunior.innerHTML = '$' + Math.round(juniorDebt).toLocaleString('en-US') +
+                    '<span style="font-size: 10px; color: #888; margin-left: 8px;">' + juniorPct + '%</span>';
+            }
+            if (priceBreakdownSeller) {
+                const sellerPct = price > 0 ? ((sellerCarry / price) * 100).toFixed(1) : '0.0';
+                priceBreakdownSeller.innerHTML = '$' + Math.round(sellerCarry).toLocaleString('en-US') +
+                    '<span style="font-size: 10px; color: #888; margin-left: 8px;">' + sellerPct + '%</span>';
+            }
+
             // Update Total to Seller (5 Years) - using direct IDs
             const seller5yrValueEl = document.getElementById('total_seller_5yr_value');
             const seller5yrDetailsEl = document.getElementById('total_seller_5yr_details');
@@ -792,6 +851,7 @@ $allBusinesses = $db->getAllBusinesses();
                 seller5yrDetailsEl.innerHTML =
                     'Down: $' + Math.round(downPayment).toLocaleString('en-US') + '<br>' +
                     'SBA Loan (Full): $' + Math.round(loan).toLocaleString('en-US') + '<br>' +
+                    'Junior Debt (Full): $' + Math.round(juniorDebt).toLocaleString('en-US') + '<br>' +
                     'Seller Carry Principal: $' + Math.round((sellerMonthlyPayment * 60) - seller5yrInterest).toLocaleString('en-US') + '<br>' +
                     'Seller Carry Interest: $' + Math.round(seller5yrInterest).toLocaleString('en-US') + '<br>' +
                     'Seller Carry Balloon: $' + Math.round(sellerBalloon5yr).toLocaleString('en-US') + '<br>' +
@@ -808,16 +868,17 @@ $allBusinesses = $db->getAllBusinesses();
                 seller10yrDetailsEl.innerHTML =
                     'Down: $' + Math.round(downPayment).toLocaleString('en-US') + '<br>' +
                     'SBA Loan (Full): $' + Math.round(loan).toLocaleString('en-US') + '<br>' +
+                    'Junior Debt (Full): $' + Math.round(juniorDebt).toLocaleString('en-US') + '<br>' +
                     'Seller Carry Principal: $' + Math.round((sellerMonthlyPayment * Math.min(120, sellerDuration)) - seller10yrInterest).toLocaleString('en-US') + '<br>' +
                     'Seller Carry Interest: $' + Math.round(seller10yrInterest).toLocaleString('en-US') + '<br>' +
                     'Consulting: $' + Math.round(consultingFee).toLocaleString('en-US');
             }
 
-            // Validation check
-            const totalCheck = loan + sellerCarry + downPayment;
+            // Validation check - includes junior debt
+            const totalCheck = loan + sellerCarry + juniorDebt + downPayment;
             const validationPass = Math.abs(totalCheck - price) < 0.01;
             const validationEl = document.getElementById('validation');
-            validationEl.textContent = 'Validation: Loan + Seller Carry + Down Payment = ' + formatCurrency(totalCheck) +
+            validationEl.textContent = 'Validation: Loan + Seller Carry + Junior Debt + Down Payment = ' + formatCurrency(totalCheck) +
                 (validationPass ? ' ✓ Equals Price' : ' ✗ Does NOT equal Price (' + formatCurrency(price) + ')');
             validationEl.className = 'validation-check ' + (validationPass ? 'validation-pass' : 'validation-fail');
         }
@@ -843,8 +904,8 @@ $allBusinesses = $db->getAllBusinesses();
         document.addEventListener('DOMContentLoaded', function() {
             const inputs = [
                 'sde', 'price', 'optional_salary', 'extra_costs', 'capex', 'consulting_fee',
-                'pct_down_payment', 'pct_seller_carry', 'loan_fee', 'closing_costs', 'other_fees',
-                'seller_duration', 'seller_interest', 'sba_duration', 'sba_interest'
+                'pct_down_payment', 'pct_seller_carry', 'pct_junior_debt', 'loan_fee', 'closing_costs', 'other_fees',
+                'seller_duration', 'seller_interest', 'junior_duration', 'junior_interest', 'sba_duration', 'sba_interest'
             ];
 
             inputs.forEach(id => {
@@ -957,6 +1018,16 @@ $allBusinesses = $db->getAllBusinesses();
                     <input type="number" id="pct_seller_carry" name="pct_seller_carry" value="<?php echo htmlspecialchars($loadedData['pct_seller_carry'] ?? $_POST['pct_seller_carry'] ?? '10'); ?>" step="0.01" min="0" max="100">
                 </div>
 
+                <div class="form-row">
+                    <label>Junior Debt:</label>
+                    <input type="text" disabled id="junior_debt" value="">
+                </div>
+
+                <div class="form-row">
+                    <label for="pct_junior_debt">% Junior Debt:</label>
+                    <input type="number" id="pct_junior_debt" name="pct_junior_debt" value="<?php echo htmlspecialchars($loadedData['pct_junior_debt'] ?? $_POST['pct_junior_debt'] ?? '0'); ?>" step="0.01" min="0" max="100">
+                </div>
+
                 <div class="section-title">SBA Loan</div>
 
                 <div class="form-row">
@@ -1003,6 +1074,34 @@ $allBusinesses = $db->getAllBusinesses();
                     <div class="form-row">
                         <label>10 Years of Interest:</label>
                         <input type="text" disabled id="seller_10yr_interest" value="">
+                    </div>
+                </div>
+
+                <div class="loan-section">
+                    <h3>Junior Debt</h3>
+                    <div class="form-row">
+                        <label>Junior Debt Amount:</label>
+                        <input type="text" disabled id="junior_loan_amount" value="">
+                    </div>
+                    <div class="form-row">
+                        <label for="junior_duration">Duration in Months:</label>
+                        <input type="number" id="junior_duration" name="junior_duration" value="<?php echo htmlspecialchars($loadedData['junior_duration'] ?? $_POST['junior_duration'] ?? '120'); ?>">
+                    </div>
+                    <div class="form-row">
+                        <label for="junior_interest">Interest (%):</label>
+                        <input type="number" id="junior_interest" name="junior_interest" value="<?php echo htmlspecialchars($loadedData['junior_interest'] ?? $_POST['junior_interest'] ?? '8'); ?>" step="0.01">
+                    </div>
+                    <div class="form-row">
+                        <label>Monthly Payment:</label>
+                        <input type="text" disabled id="junior_monthly_payment" value="">
+                    </div>
+                    <div class="form-row">
+                        <label>5 Years of Interest:</label>
+                        <input type="text" disabled id="junior_5yr_interest" value="">
+                    </div>
+                    <div class="form-row">
+                        <label>10 Years of Interest:</label>
+                        <input type="text" disabled id="junior_10yr_interest" value="">
                     </div>
                 </div>
 
@@ -1055,11 +1154,14 @@ $allBusinesses = $db->getAllBusinesses();
             $consulting_fee = floatval($_POST['consulting_fee'] ?? 0);
             $pct_down_payment = floatval($_POST['pct_down_payment'] ?? 10);
             $pct_seller_carry = floatval($_POST['pct_seller_carry'] ?? 10);
+            $pct_junior_debt = floatval($_POST['pct_junior_debt'] ?? 0);
             $loan_fee = floatval($_POST['loan_fee'] ?? 13485);
             $closing_costs = floatval($_POST['closing_costs'] ?? 15000);
             $other_fees = floatval($_POST['other_fees'] ?? 15000);
             $seller_duration = intval($_POST['seller_duration'] ?? 120);
             $seller_interest = floatval($_POST['seller_interest'] ?? 7);
+            $junior_duration = intval($_POST['junior_duration'] ?? 120);
+            $junior_interest = floatval($_POST['junior_interest'] ?? 8);
             $sba_duration = intval($_POST['sba_duration'] ?? 120);
             $sba_interest = floatval($_POST['sba_interest'] ?? 10);
 
@@ -1069,9 +1171,10 @@ $allBusinesses = $db->getAllBusinesses();
             $multiple = $sde > 0 ? $price / $sde : 0;
             $down_payment = $price * ($pct_down_payment / 100);
             $seller_carry = $price * ($pct_seller_carry / 100);
+            $junior_debt = $price * ($pct_junior_debt / 100);
 
-            // Calculate loan amount (what's left after down payment and seller carry)
-            $loan = $price - $down_payment - $seller_carry;
+            // Calculate loan amount (what's left after down payment, seller carry, and junior debt)
+            $loan = $price - $down_payment - $seller_carry - $junior_debt;
 
             // SBA loan amount includes the loan plus all fees
             $sba_loan_amount = $loan + $loan_fee + $closing_costs + $other_fees;
@@ -1126,30 +1229,38 @@ $allBusinesses = $db->getAllBusinesses();
             $seller_5yr_interest = calculateInterestPaid($seller_carry, $seller_interest, $seller_duration, 60);
             $seller_10yr_interest = calculateInterestPaid($seller_carry, $seller_interest, $seller_duration, 120);
 
+            // Junior debt loan calculations
+            $junior_monthly_payment = calculateLoanPayment($junior_debt, $junior_interest, $junior_duration);
+            $junior_annual_payment = $junior_monthly_payment * 12;
+            $junior_5yr_interest = calculateInterestPaid($junior_debt, $junior_interest, $junior_duration, 60);
+            $junior_10yr_interest = calculateInterestPaid($junior_debt, $junior_interest, $junior_duration, 120);
+
             // SBA loan calculations
             $sba_monthly_payment = calculateLoanPayment($sba_loan_amount, $sba_interest, $sba_duration);
             $sba_annual_payment = $sba_monthly_payment * 12;
             $sba_5yr_interest = calculateInterestPaid($sba_loan_amount, $sba_interest, $sba_duration, 60);
             $sba_10yr_interest = calculateInterestPaid($sba_loan_amount, $sba_interest, $sba_duration, 120);
 
-            // Calculate balloon payment on seller carry loan
+            // Calculate balloon payments on seller carry and junior debt loans
             $seller_balloon_5yr = calculateRemainingBalance($seller_carry, $seller_interest, $seller_duration, 60);
             $seller_balloon_10yr = calculateRemainingBalance($seller_carry, $seller_interest, $seller_duration, 120);
+            $junior_balloon_5yr = calculateRemainingBalance($junior_debt, $junior_interest, $junior_duration, 60);
+            $junior_balloon_10yr = calculateRemainingBalance($junior_debt, $junior_interest, $junior_duration, 120);
 
-            // Total to seller calculations
-            // At 5 years: Down + Full SBA Loan + Seller Carry payments (5 years) + Seller Carry Balloon + Consulting
-            $total_seller_5yr = $down_payment + $loan + ($seller_monthly_payment * 60) + $seller_balloon_5yr + $consulting_fee;
+            // Total to seller calculations - NOW INCLUDES JUNIOR DEBT
+            // At 5 years: Down + Full SBA Loan + Full Junior Debt + Seller Carry payments (5 years) + Seller Carry Balloon + Consulting
+            $total_seller_5yr = $down_payment + $loan + $junior_debt + ($seller_monthly_payment * 60) + $seller_balloon_5yr + $consulting_fee;
 
-            // At 10 years: Down + Full SBA Loan + Seller Carry payments (full duration) + Consulting
-            $total_seller_10yr = $down_payment + $loan + ($seller_monthly_payment * min(120, $seller_duration)) + $consulting_fee;
+            // At 10 years: Down + Full SBA Loan + Full Junior Debt + Seller Carry payments (full duration) + Consulting
+            $total_seller_10yr = $down_payment + $loan + $junior_debt + ($seller_monthly_payment * min(120, $seller_duration)) + $consulting_fee;
 
-            // Cashflow calculation
-            $monthly_cashflow = ($sde / 12) - $sba_monthly_payment - $seller_monthly_payment - ($optional_salary / 12) - ($extra_costs / 12) - ($capex / 12);
-            $annual_cashflow = $sde - $sba_annual_payment - $seller_annual_payment - $optional_salary - $extra_costs - $capex;
+            // Cashflow calculation - includes junior debt
+            $monthly_cashflow = ($sde / 12) - $sba_monthly_payment - $seller_monthly_payment - $junior_monthly_payment - ($optional_salary / 12) - ($extra_costs / 12) - ($capex / 12);
+            $annual_cashflow = $sde - $sba_annual_payment - $seller_annual_payment - $junior_annual_payment - $optional_salary - $extra_costs - $capex;
 
-            // Calculate DSCR (Debt Service Coverage Ratio)
+            // Calculate DSCR (Debt Service Coverage Ratio) - includes junior debt
             $net_operating_income = $sde - $optional_salary - $extra_costs - $capex;
-            $total_debt_service = $sba_annual_payment + $seller_annual_payment;
+            $total_debt_service = $sba_annual_payment + $seller_annual_payment + $junior_annual_payment;
             $dscr = $total_debt_service > 0 ? $net_operating_income / $total_debt_service : 0;
 
             // Determine DSCR status and color
@@ -1167,12 +1278,12 @@ $allBusinesses = $db->getAllBusinesses();
                 $dscr_status = 'Weak';
             }
 
-            // Total payments over 5 and 10 years
-            $total_paid_5yr = ($sba_monthly_payment * 60) + ($seller_monthly_payment * 60) + $down_payment + ($extra_costs * 5) + $consulting_fee + $seller_balloon_5yr;
-            $total_paid_10yr = ($sba_monthly_payment * 120) + ($seller_monthly_payment * 120) + $down_payment + ($extra_costs * 10) + $consulting_fee;
+            // Total payments over 5 and 10 years - includes junior debt
+            $total_paid_5yr = ($sba_monthly_payment * 60) + ($seller_monthly_payment * 60) + ($junior_monthly_payment * 60) + $down_payment + ($extra_costs * 5) + $consulting_fee + $seller_balloon_5yr + $junior_balloon_5yr;
+            $total_paid_10yr = ($sba_monthly_payment * 120) + ($seller_monthly_payment * 120) + ($junior_monthly_payment * 120) + $down_payment + ($extra_costs * 10) + $consulting_fee;
 
-            // Validation
-            $total_check = $loan + $seller_carry + $down_payment;
+            // Validation - includes junior debt
+            $total_check = $loan + $seller_carry + $junior_debt + $down_payment;
             $validation_pass = abs($total_check - $price) < 0.01;
 
             ?>
@@ -1181,13 +1292,19 @@ $allBusinesses = $db->getAllBusinesses();
                 <h2>Buyer Cashflow Analysis</h2>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
-                    <div style="background-color: white; padding: 12px; border-radius: 4px; border-left: 3px solid <?php echo $monthly_cashflow >= 0 ? '#2196F3' : '#f44336'; ?>;">
+                    <div id="monthly_cashflow_container" style="background-color: white; padding: 12px; border-radius: 4px; border-left: 3px solid <?php echo $monthly_cashflow >= 0 ? '#2196F3' : '#f44336'; ?>;">
                         <div style="font-size: 10px; color: #666; margin-bottom: 4px;">MONTHLY CASHFLOW</div>
-                        <div style="font-size: 20px; font-weight: bold; color: <?php echo $monthly_cashflow >= 0 ? '#1565c0' : '#c62828'; ?>;">
+                        <div id="monthly_cashflow_value" style="font-size: 20px; font-weight: bold; color: <?php echo $monthly_cashflow >= 0 ? '#1565c0' : '#c62828'; ?>;">
                             $<?php echo number_format($monthly_cashflow, 0); ?>
                         </div>
-                        <div style="font-size: 9px; color: #888; margin-top: 4px;">
-                            SDE - Loan Payments - Salary - Costs
+                        <div id="monthly_cashflow_details" style="font-size: 9px; color: #888; margin-top: 6px;">
+                            SDE: $<?php echo number_format($sde / 12, 0); ?><br>
+                            SBA Payment: -$<?php echo number_format($sba_monthly_payment, 0); ?><br>
+                            Junior Debt Payment: -$<?php echo number_format($junior_monthly_payment, 0); ?><br>
+                            Seller Payment: -$<?php echo number_format($seller_monthly_payment, 0); ?><br>
+                            Salary: -$<?php echo number_format($optional_salary / 12, 0); ?><br>
+                            Extra Costs: -$<?php echo number_format($extra_costs / 12, 0); ?><br>
+                            Capex: -$<?php echo number_format($capex / 12, 0); ?>
                         </div>
                     </div>
 
@@ -1233,21 +1350,28 @@ $allBusinesses = $db->getAllBusinesses();
                     <div style="border-top: 1px solid #e0e0e0; padding-top: 8px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                             <span style="font-size: 11px; color: #555; font-weight: 600;">Down:</span>
-                            <span style="font-size: 13px; font-weight: bold; color: #2c3e50;">
+                            <span id="price_breakdown_down" style="font-size: 13px; font-weight: bold; color: #2c3e50;">
                                 $<?php echo number_format($down_payment, 0); ?>
                                 <span style="font-size: 10px; color: #888; margin-left: 8px;"><?php echo number_format($pct_down_payment, 1); ?>%</span>
                             </span>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                             <span style="font-size: 11px; color: #555; font-weight: 600;">SBA Loan:</span>
-                            <span style="font-size: 13px; font-weight: bold; color: #2c3e50;">
+                            <span id="price_breakdown_sba" style="font-size: 13px; font-weight: bold; color: #2c3e50;">
                                 $<?php echo number_format($loan, 0); ?>
                                 <span style="font-size: 10px; color: #888; margin-left: 8px;"><?php echo number_format(($loan / $price) * 100, 1); ?>%</span>
                             </span>
                         </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 11px; color: #555; font-weight: 600;">Junior Debt:</span>
+                            <span id="price_breakdown_junior" style="font-size: 13px; font-weight: bold; color: #2c3e50;">
+                                $<?php echo number_format($junior_debt, 0); ?>
+                                <span style="font-size: 10px; color: #888; margin-left: 8px;"><?php echo number_format($pct_junior_debt, 1); ?>%</span>
+                            </span>
+                        </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <span style="font-size: 11px; color: #555; font-weight: 600;">Seller Carry:</span>
-                            <span style="font-size: 13px; font-weight: bold; color: #2c3e50;">
+                            <span id="price_breakdown_seller" style="font-size: 13px; font-weight: bold; color: #2c3e50;">
                                 $<?php echo number_format($seller_carry, 0); ?>
                                 <span style="font-size: 10px; color: #888; margin-left: 8px;"><?php echo number_format($pct_seller_carry, 1); ?>%</span>
                             </span>
@@ -1266,6 +1390,7 @@ $allBusinesses = $db->getAllBusinesses();
                         <div id="total_seller_5yr_details" style="font-size: 9px; color: #888; margin-top: 6px;">
                             Down: $<?php echo number_format($down_payment, 0); ?><br>
                             SBA Loan (Full): $<?php echo number_format($loan, 0); ?><br>
+                            Junior Debt (Full): $<?php echo number_format($junior_debt, 0); ?><br>
                             Seller Carry Principal: $<?php echo number_format(($seller_monthly_payment * 60) - $seller_5yr_interest, 0); ?><br>
                             Seller Carry Interest: $<?php echo number_format($seller_5yr_interest, 0); ?><br>
                             Seller Carry Balloon: $<?php echo number_format($seller_balloon_5yr, 0); ?><br>
@@ -1281,6 +1406,7 @@ $allBusinesses = $db->getAllBusinesses();
                         <div id="total_seller_10yr_details" style="font-size: 9px; color: #888; margin-top: 6px;">
                             Down: $<?php echo number_format($down_payment, 0); ?><br>
                             SBA Loan (Full): $<?php echo number_format($loan, 0); ?><br>
+                            Junior Debt (Full): $<?php echo number_format($junior_debt, 0); ?><br>
                             Seller Carry Principal: $<?php echo number_format(($seller_monthly_payment * min(120, $seller_duration)) - $seller_10yr_interest, 0); ?><br>
                             Seller Carry Interest: $<?php echo number_format($seller_10yr_interest, 0); ?><br>
                             Consulting: $<?php echo number_format($consulting_fee, 0); ?>
@@ -1294,17 +1420,22 @@ $allBusinesses = $db->getAllBusinesses();
                 document.getElementById('multiple').value = '<?php echo number_format($multiple, 2); ?>';
                 document.getElementById('down_payment').value = '$<?php echo number_format($down_payment, 2); ?>';
                 document.getElementById('seller_carry').value = '$<?php echo number_format($seller_carry, 2); ?>';
+                document.getElementById('junior_debt').value = '$<?php echo number_format($junior_debt, 2); ?>';
                 document.getElementById('seller_loan_amount').value = '$<?php echo number_format($seller_carry, 2); ?>';
+                document.getElementById('junior_loan_amount').value = '$<?php echo number_format($junior_debt, 2); ?>';
                 document.getElementById('sba_loan_base').value = '$<?php echo number_format($loan, 2); ?>';
                 document.getElementById('sba_loan_amount').value = '$<?php echo number_format($sba_loan_amount, 2); ?>';
                 document.getElementById('seller_monthly_payment').value = '$<?php echo number_format($seller_monthly_payment, 2); ?>';
                 document.getElementById('seller_5yr_interest').value = '$<?php echo number_format($seller_5yr_interest, 2); ?>';
                 document.getElementById('seller_10yr_interest').value = '$<?php echo number_format($seller_10yr_interest, 2); ?>';
+                document.getElementById('junior_monthly_payment').value = '$<?php echo number_format($junior_monthly_payment, 2); ?>';
+                document.getElementById('junior_5yr_interest').value = '$<?php echo number_format($junior_5yr_interest, 2); ?>';
+                document.getElementById('junior_10yr_interest').value = '$<?php echo number_format($junior_10yr_interest, 2); ?>';
                 document.getElementById('sba_monthly_payment').value = '$<?php echo number_format($sba_monthly_payment, 2); ?>';
                 document.getElementById('sba_5yr_interest').value = '$<?php echo number_format($sba_5yr_interest, 2); ?>';
                 document.getElementById('sba_10yr_interest').value = '$<?php echo number_format($sba_10yr_interest, 2); ?>';
 
-                document.getElementById('validation').textContent = 'Validation: Loan + Seller Carry + Down Payment = $<?php echo number_format($total_check, 2); ?> <?php echo $validation_pass ? '✓ Equals Price' : '✗ Does NOT equal Price ($' . number_format($price, 2) . ')'; ?>';
+                document.getElementById('validation').textContent = 'Validation: Loan + Seller Carry + Junior Debt + Down Payment = $<?php echo number_format($total_check, 2); ?> <?php echo $validation_pass ? '✓ Equals Price' : '✗ Does NOT equal Price ($' . number_format($price, 2) . ')'; ?>';
                 document.getElementById('validation').className = 'validation-check <?php echo $validation_pass ? 'validation-pass' : 'validation-fail'; ?>';
             </script>
             <?php

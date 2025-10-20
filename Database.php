@@ -43,6 +43,29 @@ class Database {
             $schema = file_get_contents($schemaFile);
             $this->pdo->exec($schema);
         }
+
+        // Run migrations to add new columns to existing databases
+        $this->runMigrations();
+    }
+
+    /**
+     * Run database migrations to add new columns
+     */
+    private function runMigrations() {
+        // Check if junior debt columns exist, if not add them
+        try {
+            // Try to select the column - if it fails, column doesn't exist
+            $this->pdo->query('SELECT pct_junior_debt FROM businesses LIMIT 1');
+        } catch (PDOException $e) {
+            // Column doesn't exist, add it
+            try {
+                $this->pdo->exec('ALTER TABLE businesses ADD COLUMN pct_junior_debt REAL DEFAULT 0');
+                $this->pdo->exec('ALTER TABLE businesses ADD COLUMN junior_duration INTEGER DEFAULT 120');
+                $this->pdo->exec('ALTER TABLE businesses ADD COLUMN junior_interest REAL DEFAULT 8');
+            } catch (PDOException $e) {
+                // Migration failed, but continue - might already exist from schema
+            }
+        }
     }
 
     /**
@@ -73,12 +96,12 @@ class Database {
     public function createBusiness($data) {
         $sql = "INSERT INTO businesses (
             business_name, sde, price, optional_salary, extra_costs, capex, consulting_fee,
-            pct_down_payment, pct_seller_carry, loan_fee, closing_costs, other_fees,
-            seller_duration, seller_interest, sba_duration, sba_interest
+            pct_down_payment, pct_seller_carry, pct_junior_debt, loan_fee, closing_costs, other_fees,
+            seller_duration, seller_interest, junior_duration, junior_interest, sba_duration, sba_interest
         ) VALUES (
             :business_name, :sde, :price, :optional_salary, :extra_costs, :capex, :consulting_fee,
-            :pct_down_payment, :pct_seller_carry, :loan_fee, :closing_costs, :other_fees,
-            :seller_duration, :seller_interest, :sba_duration, :sba_interest
+            :pct_down_payment, :pct_seller_carry, :pct_junior_debt, :loan_fee, :closing_costs, :other_fees,
+            :seller_duration, :seller_interest, :junior_duration, :junior_interest, :sba_duration, :sba_interest
         )";
 
         $stmt = $this->pdo->prepare($sql);
@@ -92,11 +115,14 @@ class Database {
             ':consulting_fee' => $data['consulting_fee'] ?? 0,
             ':pct_down_payment' => $data['pct_down_payment'] ?? 10,
             ':pct_seller_carry' => $data['pct_seller_carry'] ?? 10,
+            ':pct_junior_debt' => $data['pct_junior_debt'] ?? 0,
             ':loan_fee' => $data['loan_fee'] ?? 13485,
             ':closing_costs' => $data['closing_costs'] ?? 15000,
             ':other_fees' => $data['other_fees'] ?? 15000,
             ':seller_duration' => $data['seller_duration'] ?? 120,
             ':seller_interest' => $data['seller_interest'] ?? 7,
+            ':junior_duration' => $data['junior_duration'] ?? 120,
+            ':junior_interest' => $data['junior_interest'] ?? 8,
             ':sba_duration' => $data['sba_duration'] ?? 120,
             ':sba_interest' => $data['sba_interest'] ?? 10
         ]);
@@ -121,11 +147,14 @@ class Database {
             consulting_fee = :consulting_fee,
             pct_down_payment = :pct_down_payment,
             pct_seller_carry = :pct_seller_carry,
+            pct_junior_debt = :pct_junior_debt,
             loan_fee = :loan_fee,
             closing_costs = :closing_costs,
             other_fees = :other_fees,
             seller_duration = :seller_duration,
             seller_interest = :seller_interest,
+            junior_duration = :junior_duration,
+            junior_interest = :junior_interest,
             sba_duration = :sba_duration,
             sba_interest = :sba_interest,
             modified_date = CURRENT_TIMESTAMP
@@ -143,11 +172,14 @@ class Database {
             ':consulting_fee' => $data['consulting_fee'] ?? 0,
             ':pct_down_payment' => $data['pct_down_payment'] ?? 10,
             ':pct_seller_carry' => $data['pct_seller_carry'] ?? 10,
+            ':pct_junior_debt' => $data['pct_junior_debt'] ?? 0,
             ':loan_fee' => $data['loan_fee'] ?? 13485,
             ':closing_costs' => $data['closing_costs'] ?? 15000,
             ':other_fees' => $data['other_fees'] ?? 15000,
             ':seller_duration' => $data['seller_duration'] ?? 120,
             ':seller_interest' => $data['seller_interest'] ?? 7,
+            ':junior_duration' => $data['junior_duration'] ?? 120,
+            ':junior_interest' => $data['junior_interest'] ?? 8,
             ':sba_duration' => $data['sba_duration'] ?? 120,
             ':sba_interest' => $data['sba_interest'] ?? 10
         ]);
