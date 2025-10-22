@@ -1,47 +1,4 @@
 <?php
-/*
- * ============================================
- * BUSINESS VALUATION CALCULATOR v1.16
- * ============================================
- *
- * FILE STRUCTURE:
- * 1. PHP BACKEND
- *    - Calculation Functions: calculateLoanPayment, calculateInterestPaid, calculateRemainingBalance
- *    - Main Calculator: calculateBusinessMetrics() returns all metrics
- *    - AJAX Endpoint: Handles ?ajax=calculate requests for real-time updates
- *    - Form Processing: Database save/update/delete operations
- *    - Session & Security: CSRF protection, input validation
- *
- * 2. CSS STYLES
- *    - Organized by section with clear comments
- *    - Utility classes for common patterns (labels, values, cards, grids)
- *    - Mobile responsive design
- *
- * 3. JAVASCRIPT
- *    - updateCalculations(): AJAX-based, calls PHP for all calculations
- *    - Event handlers for real-time updates
- *    - Form submission and validation
- *
- * 4. HTML
- *    - Record manager (load/save/delete)
- *    - Input forms (SBA, Seller, Junior Debt)
- *    - Results display (cashflow, DSCR, price breakdown)
- *
- * ARCHITECTURE:
- * - Single source of truth: All calculations in PHP only
- * - Real-time updates via AJAX (fetch API)
- * - Zero calculation duplication between PHP and JavaScript
- * - CSS utility classes replace inline styles for maintainability
- *
- * KEY FEATURES:
- * - SBA loan, Seller carry, Junior debt calculations
- * - Monthly/Annual cashflow analysis
- * - DSCR (Debt Service Coverage Ratio)
- * - Balloon payment calculations
- * - SQLite database with automatic schema migration
- * - CSRF protection and secure sessions
- */
-
 // ============================================
 // BUSINESS RECORD MANAGEMENT WITH SQLITE
 // ============================================
@@ -119,139 +76,6 @@ function checkRateLimit() {
 
     // Add current request
     $_SESSION['rate_limit'][] = $now;
-}
-
-// ============================================
-// CALCULATION FUNCTIONS (Single Source of Truth)
-// ============================================
-
-function calculateLoanPayment($principal, $annualInterestRate, $numPayments) {
-    if ($principal <= 0 || $numPayments <= 0) return 0;
-    $monthlyRate = ($annualInterestRate / 100) / 12;
-    if ($monthlyRate == 0) return $principal / $numPayments;
-    return $principal * ($monthlyRate * pow(1 + $monthlyRate, $numPayments)) / (pow(1 + $monthlyRate, $numPayments) - 1);
-}
-
-function calculateInterestPaid($principal, $annualInterestRate, $numPayments, $monthsToCalculate) {
-    if ($principal <= 0 || $numPayments <= 0) return 0;
-    $monthlyRate = ($annualInterestRate / 100) / 12;
-    $monthlyPayment = calculateLoanPayment($principal, $annualInterestRate, $numPayments);
-
-    $balance = $principal;
-    $totalInterest = 0;
-
-    for ($i = 0; $i < min($monthsToCalculate, $numPayments); $i++) {
-        $interestPayment = $balance * $monthlyRate;
-        $totalInterest += $interestPayment;
-        $principalPayment = $monthlyPayment - $interestPayment;
-        $balance -= $principalPayment;
-    }
-
-    return $totalInterest;
-}
-
-function calculateRemainingBalance($principal, $annualInterestRate, $numPayments, $monthsPaid) {
-    if ($principal <= 0 || $numPayments <= 0) return 0;
-    $monthlyRate = ($annualInterestRate / 100) / 12;
-    $monthlyPayment = calculateLoanPayment($principal, $annualInterestRate, $numPayments);
-
-    $balance = $principal;
-
-    for ($i = 0; $i < min($monthsPaid, $numPayments); $i++) {
-        $interestPayment = $balance * $monthlyRate;
-        $principalPayment = $monthlyPayment - $interestPayment;
-        $balance -= $principalPayment;
-    }
-
-    return max(0, $balance);
-}
-
-function calculateBusinessMetrics($data) {
-    // Extract values
-    $sde = $data['sde'];
-    $price = $data['price'];
-    $optionalSalary = $data['optional_salary'];
-    $extraCosts = $data['extra_costs'];
-    $capex = $data['capex'];
-    $consultingFee = $data['consulting_fee'];
-
-    // Calculate percentages to amounts
-    $downPayment = $price * ($data['pct_down_payment'] / 100);
-    $sellerCarry = $price * ($data['pct_seller_carry'] / 100);
-    $juniorDebt = $price * ($data['pct_junior_debt'] / 100);
-    $loan = $price - $downPayment - $sellerCarry - $juniorDebt;
-    $sbaLoanAmount = $loan + $data['loan_fee'] + $data['closing_costs'] + $data['other_fees'];
-
-    // Calculate loan payments
-    $sellerMonthlyPayment = calculateLoanPayment($sellerCarry, $data['seller_interest'], $data['seller_duration']);
-    $juniorMonthlyPayment = calculateLoanPayment($juniorDebt, $data['junior_interest'], $data['junior_duration']);
-    $sbaMonthlyPayment = calculateLoanPayment($sbaLoanAmount, $data['sba_interest'], $data['sba_duration']);
-
-    // Calculate cashflow
-    $monthlyCashflow = ($sde / 12) - $sbaMonthlyPayment - $sellerMonthlyPayment - $juniorMonthlyPayment - ($optionalSalary / 12) - ($extraCosts / 12) - ($capex / 12);
-    $annualCashflow = $sde - ($sbaMonthlyPayment * 12) - ($sellerMonthlyPayment * 12) - ($juniorMonthlyPayment * 12) - $optionalSalary - $extraCosts - $capex;
-
-    // Calculate DSCR
-    $netOperatingIncome = $sde - $optionalSalary - $extraCosts - $capex;
-    $totalDebtService = ($sbaMonthlyPayment * 12) + ($sellerMonthlyPayment * 12) + ($juniorMonthlyPayment * 12);
-    $dscr = $totalDebtService > 0 ? $netOperatingIncome / $totalDebtService : 0;
-
-    // Calculate balloon payments
-    $sellerBalloon5yr = calculateRemainingBalance($sellerCarry, $data['seller_interest'], $data['seller_duration'], 60);
-    $sellerBalloon10yr = calculateRemainingBalance($sellerCarry, $data['seller_interest'], $data['seller_duration'], 120);
-    $juniorBalloon5yr = calculateRemainingBalance($juniorDebt, $data['junior_interest'], $data['junior_duration'], 60);
-    $juniorBalloon10yr = calculateRemainingBalance($juniorDebt, $data['junior_interest'], $data['junior_duration'], 120);
-
-    // Calculate totals to seller
-    $totalSeller5yr = $downPayment + $loan + $juniorDebt + ($sellerMonthlyPayment * 60) + $sellerBalloon5yr + $consultingFee;
-    $totalSeller10yr = $downPayment + $loan + $juniorDebt + ($sellerMonthlyPayment * min(120, $data['seller_duration'])) + $consultingFee;
-
-    return [
-        'multiple' => $sde > 0 ? $price / $sde : 0,
-        'down_payment' => $downPayment,
-        'seller_carry' => $sellerCarry,
-        'junior_debt' => $juniorDebt,
-        'loan' => $loan,
-        'sba_loan_amount' => $sbaLoanAmount,
-        'seller_monthly_payment' => $sellerMonthlyPayment,
-        'junior_monthly_payment' => $juniorMonthlyPayment,
-        'sba_monthly_payment' => $sbaMonthlyPayment,
-        'monthly_cashflow' => $monthlyCashflow,
-        'annual_cashflow' => $annualCashflow,
-        'annual_cashflow_with_salary' => $annualCashflow + $optionalSalary,
-        'dscr' => $dscr,
-        'seller_5yr_interest' => calculateInterestPaid($sellerCarry, $data['seller_interest'], $data['seller_duration'], 60),
-        'seller_10yr_interest' => calculateInterestPaid($sellerCarry, $data['seller_interest'], $data['seller_duration'], 120),
-        'junior_5yr_interest' => calculateInterestPaid($juniorDebt, $data['junior_interest'], $data['junior_duration'], 60),
-        'junior_10yr_interest' => calculateInterestPaid($juniorDebt, $data['junior_interest'], $data['junior_duration'], 120),
-        'sba_5yr_interest' => calculateInterestPaid($sbaLoanAmount, $data['sba_interest'], $data['sba_duration'], 60),
-        'sba_10yr_interest' => calculateInterestPaid($sbaLoanAmount, $data['sba_interest'], $data['sba_duration'], 120),
-        'seller_balloon_5yr' => $sellerBalloon5yr,
-        'seller_balloon_10yr' => $sellerBalloon10yr,
-        'junior_balloon_5yr' => $juniorBalloon5yr,
-        'junior_balloon_10yr' => $juniorBalloon10yr,
-        'total_seller_5yr' => $totalSeller5yr,
-        'total_seller_10yr' => $totalSeller10yr,
-        'validation_pass' => abs(($loan + $sellerCarry + $juniorDebt + $downPayment) - $price) < 0.01
-    ];
-}
-
-// ============================================
-// AJAX ENDPOINT (Same file, no duplication!)
-// ============================================
-
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'calculate') {
-    header('Content-Type: application/json');
-
-    // Get inputs from AJAX request
-    $input = json_decode(file_get_contents('php://input'), true);
-
-    // Calculate using PHP functions (single source of truth)
-    $metrics = calculateBusinessMetrics($input);
-
-    // Return JSON
-    echo json_encode($metrics);
-    exit; // Stop here, don't render HTML
 }
 
 // ============================================
@@ -409,9 +233,6 @@ $allBusinesses = $db->getAllBusinesses();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Business Valuation Calculator</title>
     <style>
-        /* ============================================
-           RESET & BASE STYLES
-           ============================================ */
         * {
             margin: 0;
             padding: 0;
@@ -425,9 +246,6 @@ $allBusinesses = $db->getAllBusinesses();
             font-size: 12px;
         }
 
-        /* ============================================
-           LAYOUT
-           ============================================ */
         .container {
             max-width: 1400px;
             margin: 0 auto;
@@ -443,9 +261,6 @@ $allBusinesses = $db->getAllBusinesses();
             gap: 20px;
         }
 
-        /* ============================================
-           TYPOGRAPHY
-           ============================================ */
         h1 {
             color: #333;
             margin-bottom: 15px;
@@ -453,9 +268,6 @@ $allBusinesses = $db->getAllBusinesses();
             font-size: 18px;
         }
 
-        /* ============================================
-           FORMS
-           ============================================ */
         .form-section {
             margin-bottom: 20px;
         }
@@ -501,9 +313,6 @@ $allBusinesses = $db->getAllBusinesses();
             border-bottom: 2px solid #2196F3;
         }
 
-        /* ============================================
-           LOAN SECTIONS
-           ============================================ */
         .loan-sections {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
@@ -527,9 +336,6 @@ $allBusinesses = $db->getAllBusinesses();
             font-size: 13px;
         }
 
-        /* ============================================
-           RESULTS DISPLAY
-           ============================================ */
         .results-section {
             margin-top: 0;
             padding: 15px;
@@ -570,9 +376,6 @@ $allBusinesses = $db->getAllBusinesses();
             font-weight: bold;
         }
 
-        /* ============================================
-           VALIDATION
-           ============================================ */
         .validation-check {
             margin-top: 10px;
             padding: 8px;
@@ -591,9 +394,6 @@ $allBusinesses = $db->getAllBusinesses();
             color: #c62828;
         }
 
-        /* ============================================
-           RECORD MANAGER
-           ============================================ */
         .record-manager {
             background-color: #f0f8ff;
             padding: 15px;
@@ -634,9 +434,6 @@ $allBusinesses = $db->getAllBusinesses();
             transition: all 0.2s;
         }
 
-        /* ============================================
-           BUTTONS
-           ============================================ */
         .btn-new {
             background-color: #4CAF50;
             color: white;
@@ -673,9 +470,6 @@ $allBusinesses = $db->getAllBusinesses();
             background-color: #da190b;
         }
 
-        /* ============================================
-           MESSAGES
-           ============================================ */
         .message {
             padding: 10px;
             border-radius: 4px;
@@ -696,119 +490,6 @@ $allBusinesses = $db->getAllBusinesses();
             border: 1px solid #f44336;
         }
 
-        /* ============================================
-           UTILITY CLASSES
-           Reusable classes for common inline style patterns
-           ============================================ */
-
-        /* Percentage badges (used in Price Breakdown) */
-        .percentage-badge {
-            font-size: 10px;
-            color: #888;
-            margin-left: 8px;
-        }
-
-        /* Result cards */
-        .result-card {
-            background-color: white;
-            padding: 12px;
-            border-radius: 4px;
-            border-left: 3px solid #2196F3;
-        }
-
-        .result-card-positive {
-            border-left-color: #2196F3;
-        }
-
-        .result-card-negative {
-            border-left-color: #f44336;
-        }
-
-        /* Label and value text sizes */
-        .label-small {
-            font-size: 10px;
-            color: #666;
-            margin-bottom: 4px;
-        }
-
-        .value-large {
-            font-size: 20px;
-            font-weight: bold;
-            color: #2c3e50;
-        }
-
-        .value-positive {
-            color: #1565c0;
-        }
-
-        .value-negative {
-            color: #c62828;
-        }
-
-        .detail-text {
-            font-size: 9px;
-            color: #888;
-            margin-top: 6px;
-        }
-
-        /* Grid layouts */
-        .grid-3-col {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .grid-2-col {
-            display: grid;
-            grid-template-columns: auto auto;
-            gap: 0px;
-            justify-content: start;
-        }
-
-        .col-spacing {
-            padding-right: 15px;
-        }
-
-        /* Flex utilities */
-        .flex-between {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .flex-between-sm {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 6px;
-        }
-
-        /* Price breakdown styles */
-        .breakdown-divider {
-            border-top: 1px solid #e0e0e0;
-            padding-top: 8px;
-        }
-
-        .breakdown-label {
-            font-size: 11px;
-            color: #555;
-            font-weight: 600;
-        }
-
-        .breakdown-value {
-            font-size: 13px;
-            font-weight: bold;
-            color: #2c3e50;
-        }
-
-        .breakdown-total-pct {
-            font-size: 14px;
-            color: #666;
-            font-weight: bold;
-        }
-
         .version {
             position: fixed;
             bottom: 10px;
@@ -822,9 +503,6 @@ $allBusinesses = $db->getAllBusinesses();
             z-index: 1000;
         }
 
-        /* ============================================
-           MOBILE RESPONSIVE
-           ============================================ */
         @media (max-width: 768px) {
             body {
                 padding: 5px;
@@ -935,10 +613,47 @@ $allBusinesses = $db->getAllBusinesses();
 
     </style>
     <script>
-        // ============================================
-        // JAVASCRIPT - NO CALCULATION LOGIC!
-        // All calculations done via AJAX to PHP (single source of truth)
-        // ============================================
+        // Auto-calculate fields in real-time
+        function calculateLoanPayment(principal, annualInterestRate, numPayments) {
+            if (principal <= 0 || numPayments <= 0) return 0;
+            const monthlyRate = (annualInterestRate / 100) / 12;
+            if (monthlyRate === 0) return principal / numPayments;
+            return principal * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / (Math.pow(1 + monthlyRate, numPayments) - 1);
+        }
+
+        function calculateInterestPaid(principal, annualInterestRate, numPayments, monthsToCalculate) {
+            if (principal <= 0 || numPayments <= 0) return 0;
+            const monthlyRate = (annualInterestRate / 100) / 12;
+            const monthlyPayment = calculateLoanPayment(principal, annualInterestRate, numPayments);
+
+            let balance = principal;
+            let totalInterest = 0;
+
+            for (let i = 0; i < Math.min(monthsToCalculate, numPayments); i++) {
+                const interestPayment = balance * monthlyRate;
+                totalInterest += interestPayment;
+                const principalPayment = monthlyPayment - interestPayment;
+                balance -= principalPayment;
+            }
+
+            return totalInterest;
+        }
+
+        function calculateRemainingBalance(principal, annualInterestRate, numPayments, monthsPaid) {
+            if (principal <= 0 || numPayments <= 0) return 0;
+            const monthlyRate = (annualInterestRate / 100) / 12;
+            const monthlyPayment = calculateLoanPayment(principal, annualInterestRate, numPayments);
+
+            let balance = principal;
+
+            for (let i = 0; i < Math.min(monthsPaid, numPayments); i++) {
+                const interestPayment = balance * monthlyRate;
+                const principalPayment = monthlyPayment - interestPayment;
+                balance -= principalPayment;
+            }
+
+            return Math.max(0, balance);
+        }
 
         function formatCurrency(value) {
             return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -955,197 +670,230 @@ $allBusinesses = $db->getAllBusinesses();
         }
 
         function updateCalculations() {
-            // Gather all input values
-            const inputs = {
-                sde: parseFloat(document.getElementById('sde').value) || 0,
-                price: parseFloat(document.getElementById('price').value) || 0,
-                optional_salary: parseFloat(document.getElementById('optional_salary').value) || 0,
-                extra_costs: parseFloat(document.getElementById('extra_costs').value) || 0,
-                capex: parseFloat(document.getElementById('capex').value) || 0,
-                consulting_fee: parseFloat(document.getElementById('consulting_fee').value) || 0,
-                pct_down_payment: parseFloat(document.getElementById('pct_down_payment').value) || 0,
-                pct_seller_carry: parseFloat(document.getElementById('pct_seller_carry').value) || 0,
-                pct_junior_debt: parseFloat(document.getElementById('pct_junior_debt').value) || 0,
-                loan_fee: parseFloat(document.getElementById('loan_fee').value) || 0,
-                closing_costs: parseFloat(document.getElementById('closing_costs').value) || 0,
-                other_fees: parseFloat(document.getElementById('other_fees').value) || 0,
-                seller_duration: parseInt(document.getElementById('seller_duration').value) || 120,
-                seller_interest: parseFloat(document.getElementById('seller_interest').value) || 0,
-                junior_duration: parseInt(document.getElementById('junior_duration').value) || 120,
-                junior_interest: parseFloat(document.getElementById('junior_interest').value) || 0,
-                sba_duration: parseInt(document.getElementById('sba_duration').value) || 120,
-                sba_interest: parseFloat(document.getElementById('sba_interest').value) || 0
-            };
+            // Get input values
+            const sde = parseFloat(document.getElementById('sde').value) || 0;
+            const price = parseFloat(document.getElementById('price').value) || 0;
+            const optionalSalary = parseFloat(document.getElementById('optional_salary').value) || 0;
+            const extraCosts = parseFloat(document.getElementById('extra_costs').value) || 0;
+            const capex = parseFloat(document.getElementById('capex').value) || 0;
+            const consultingFee = parseFloat(document.getElementById('consulting_fee').value) || 0;
+            const pctDownPayment = parseFloat(document.getElementById('pct_down_payment').value) || 0;
+            const pctSellerCarry = parseFloat(document.getElementById('pct_seller_carry').value) || 0;
+            const pctJuniorDebt = parseFloat(document.getElementById('pct_junior_debt').value) || 0;
+            const loanFee = parseFloat(document.getElementById('loan_fee').value) || 0;
+            const closingCosts = parseFloat(document.getElementById('closing_costs').value) || 0;
+            const otherFees = parseFloat(document.getElementById('other_fees').value) || 0;
+            const sellerDuration = parseInt(document.getElementById('seller_duration').value) || 120;
+            const sellerInterest = parseFloat(document.getElementById('seller_interest').value) || 0;
+            const juniorDuration = parseInt(document.getElementById('junior_duration').value) || 120;
+            const juniorInterest = parseFloat(document.getElementById('junior_interest').value) || 0;
+            const sbaDuration = parseInt(document.getElementById('sba_duration').value) || 120;
+            const sbaInterest = parseFloat(document.getElementById('sba_interest').value) || 0;
 
-            // Call PHP via AJAX for calculations (single source of truth!)
-            fetch('index.php?ajax=calculate', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(inputs)
-            })
-            .then(response => response.json())
-            .then(metrics => {
-                // Update all DOM elements with calculated values
-                document.getElementById('multiple').value = metrics.multiple.toFixed(2);
-                document.getElementById('down_payment').value = formatCurrency(metrics.down_payment);
-                document.getElementById('seller_carry').value = formatCurrency(metrics.seller_carry);
-                document.getElementById('junior_debt').value = formatCurrency(metrics.junior_debt);
+            // Calculate Multiple (2 decimal places)
+            const multiple = sde > 0 ? (price / sde).toFixed(2) : '0.00';
+            document.getElementById('multiple').value = multiple;
 
-                document.getElementById('seller_loan_amount').value = formatCurrency(metrics.seller_carry);
-                document.getElementById('junior_loan_amount').value = formatCurrency(metrics.junior_debt);
-                document.getElementById('sba_loan_base').value = formatCurrency(metrics.loan);
-                document.getElementById('sba_loan_amount').value = formatCurrency(metrics.sba_loan_amount);
+            // Calculate Down Payment, Seller Carry, and Junior Debt
+            const downPayment = price * (pctDownPayment / 100);
+            const sellerCarry = price * (pctSellerCarry / 100);
+            const juniorDebt = price * (pctJuniorDebt / 100);
+            document.getElementById('down_payment').value = formatCurrency(downPayment);
+            document.getElementById('seller_carry').value = formatCurrency(sellerCarry);
+            document.getElementById('junior_debt').value = formatCurrency(juniorDebt);
 
-                document.getElementById('seller_monthly_payment').value = formatCurrency(metrics.seller_monthly_payment);
-                document.getElementById('seller_5yr_interest').value = formatCurrency(metrics.seller_5yr_interest);
-                document.getElementById('seller_10yr_interest').value = formatCurrency(metrics.seller_10yr_interest);
+            // Calculate loan amount (SBA gets what's left after down, seller carry, and junior debt)
+            const loan = price - downPayment - sellerCarry - juniorDebt;
+            const sbaLoanAmount = loan + loanFee + closingCosts + otherFees;
 
-                document.getElementById('junior_monthly_payment').value = formatCurrency(metrics.junior_monthly_payment);
-                document.getElementById('junior_5yr_interest').value = formatCurrency(metrics.junior_5yr_interest);
-                document.getElementById('junior_10yr_interest').value = formatCurrency(metrics.junior_10yr_interest);
+            // Update loan amounts in the form
+            document.getElementById('seller_loan_amount').value = formatCurrency(sellerCarry);
+            document.getElementById('junior_loan_amount').value = formatCurrency(juniorDebt);
+            document.getElementById('sba_loan_base').value = formatCurrency(loan);
+            document.getElementById('sba_loan_amount').value = formatCurrency(sbaLoanAmount);
 
-                document.getElementById('sba_monthly_payment').value = formatCurrency(metrics.sba_monthly_payment);
-                document.getElementById('sba_5yr_interest').value = formatCurrency(metrics.sba_5yr_interest);
-                document.getElementById('sba_10yr_interest').value = formatCurrency(metrics.sba_10yr_interest);
+            // Calculate Seller loan payments and interest
+            const sellerMonthlyPayment = calculateLoanPayment(sellerCarry, sellerInterest, sellerDuration);
+            const seller5yrInterest = calculateInterestPaid(sellerCarry, sellerInterest, sellerDuration, 60);
+            const seller10yrInterest = calculateInterestPaid(sellerCarry, sellerInterest, sellerDuration, 120);
 
-                // Update results section - Monthly Cashflow
-                const monthlyCashflowContainer = document.getElementById('monthly_cashflow_container');
-                const monthlyCashflowValue = document.getElementById('monthly_cashflow_value');
-                const monthlyCashflowDetails = document.getElementById('monthly_cashflow_details');
+            document.getElementById('seller_monthly_payment').value = formatCurrency(sellerMonthlyPayment);
+            document.getElementById('seller_5yr_interest').value = formatCurrency(seller5yrInterest);
+            document.getElementById('seller_10yr_interest').value = formatCurrency(seller10yrInterest);
 
-                if (monthlyCashflowContainer) {
-                    monthlyCashflowContainer.style.borderLeftColor = metrics.monthly_cashflow >= 0 ? '#2196F3' : '#f44336';
-                }
-                if (monthlyCashflowValue) {
-                    monthlyCashflowValue.textContent = '$' + Math.round(metrics.monthly_cashflow).toLocaleString('en-US');
-                    monthlyCashflowValue.style.color = metrics.monthly_cashflow >= 0 ? '#1565c0' : '#c62828';
-                }
-                if (monthlyCashflowDetails) {
-                    monthlyCashflowDetails.innerHTML =
-                        'SDE: $' + Math.round(inputs.sde / 12).toLocaleString('en-US') + '<br>' +
-                        'SBA Payment: -$' + Math.round(metrics.sba_monthly_payment).toLocaleString('en-US') + '<br>' +
-                        'Junior Debt Payment: -$' + Math.round(metrics.junior_monthly_payment).toLocaleString('en-US') + '<br>' +
-                        'Seller Payment: -$' + Math.round(metrics.seller_monthly_payment).toLocaleString('en-US') + '<br>' +
-                        'Salary: -$' + Math.round(inputs.optional_salary / 12).toLocaleString('en-US') + '<br>' +
-                        'Extra Costs: -$' + Math.round(inputs.extra_costs / 12).toLocaleString('en-US') + '<br>' +
-                        'Capex: -$' + Math.round(inputs.capex / 12).toLocaleString('en-US');
-                }
+            // Calculate Junior Debt loan payments and interest
+            const juniorMonthlyPayment = calculateLoanPayment(juniorDebt, juniorInterest, juniorDuration);
+            const junior5yrInterest = calculateInterestPaid(juniorDebt, juniorInterest, juniorDuration, 60);
+            const junior10yrInterest = calculateInterestPaid(juniorDebt, juniorInterest, juniorDuration, 120);
 
-                // Update results section - Annual Cashflow
-                const annualEl = document.querySelector('.results-section > div:nth-child(2) > div:nth-child(2)');
-                if (annualEl) {
-                    annualEl.style.borderLeftColor = metrics.annual_cashflow >= 0 ? '#2196F3' : '#f44336';
-                    const annualValueEl = annualEl.querySelector('div > div:nth-child(1) > div:nth-child(2)');
-                    const annualSalaryEl = annualEl.querySelector('div > div:nth-child(2) > div:nth-child(2)');
-                    const color = metrics.annual_cashflow >= 0 ? '#1565c0' : '#c62828';
-                    if (annualValueEl) {
-                        annualValueEl.textContent = '$' + Math.round(metrics.annual_cashflow).toLocaleString('en-US');
-                        annualValueEl.style.color = color;
-                    }
-                    if (annualSalaryEl) {
-                        annualSalaryEl.textContent = '$' + Math.round(metrics.annual_cashflow_with_salary).toLocaleString('en-US');
-                        annualSalaryEl.style.color = color;
-                    }
-                }
+            document.getElementById('junior_monthly_payment').value = formatCurrency(juniorMonthlyPayment);
+            document.getElementById('junior_5yr_interest').value = formatCurrency(junior5yrInterest);
+            document.getElementById('junior_10yr_interest').value = formatCurrency(junior10yrInterest);
 
-                // Update DSCR
-                const dscrEl = document.querySelector('.results-section > div:nth-child(2) > div:nth-child(3)');
-                if (dscrEl) {
-                    let dscrColor, dscrBorderColor;
-                    if (metrics.dscr >= 1.5) {
-                        dscrColor = '#2e7d32';
-                        dscrBorderColor = '#4CAF50';
-                    } else if (metrics.dscr >= 1.25) {
-                        dscrColor = '#f57c00';
-                        dscrBorderColor = '#FF9800';
-                    } else {
-                        dscrColor = '#c62828';
-                        dscrBorderColor = '#f44336';
-                    }
-                    dscrEl.style.borderLeftColor = dscrBorderColor;
-                    const dscrValueEl = dscrEl.querySelector('div:nth-child(2)');
-                    if (dscrValueEl) {
-                        dscrValueEl.textContent = metrics.dscr.toFixed(2);
-                        dscrValueEl.style.color = dscrColor;
-                    }
-                }
+            // Calculate SBA loan payments and interest
+            const sbaMonthlyPayment = calculateLoanPayment(sbaLoanAmount, sbaInterest, sbaDuration);
+            const sba5yrInterest = calculateInterestPaid(sbaLoanAmount, sbaInterest, sbaDuration, 60);
+            const sba10yrInterest = calculateInterestPaid(sbaLoanAmount, sbaInterest, sbaDuration, 120);
 
-                // Update Price Breakdown section
-                const priceBreakdownTotal = document.getElementById('price_breakdown_total');
-                const priceBreakdownDown = document.getElementById('price_breakdown_down');
-                const priceBreakdownSba = document.getElementById('price_breakdown_sba');
-                const priceBreakdownJunior = document.getElementById('price_breakdown_junior');
-                const priceBreakdownSeller = document.getElementById('price_breakdown_seller');
+            document.getElementById('sba_monthly_payment').value = formatCurrency(sbaMonthlyPayment);
+            document.getElementById('sba_5yr_interest').value = formatCurrency(sba5yrInterest);
+            document.getElementById('sba_10yr_interest').value = formatCurrency(sba10yrInterest);
 
-                if (priceBreakdownTotal) {
-                    priceBreakdownTotal.textContent = '$' + Math.round(inputs.price).toLocaleString('en-US');
-                }
-                if (priceBreakdownDown) {
-                    const downPct = inputs.price > 0 ? ((metrics.down_payment / inputs.price) * 100).toFixed(1) : '0.0';
-                    priceBreakdownDown.innerHTML = '$' + Math.round(metrics.down_payment).toLocaleString('en-US') +
-                        '<span class="percentage-badge">' + downPct + '%</span>';
-                }
-                if (priceBreakdownSba) {
-                    const sbaPct = inputs.price > 0 ? ((metrics.loan / inputs.price) * 100).toFixed(1) : '0.0';
-                    priceBreakdownSba.innerHTML = '$' + Math.round(metrics.loan).toLocaleString('en-US') +
-                        '<span class="percentage-badge">' + sbaPct + '%</span>';
-                }
-                if (priceBreakdownJunior) {
-                    const juniorPct = inputs.price > 0 ? ((metrics.junior_debt / inputs.price) * 100).toFixed(1) : '0.0';
-                    priceBreakdownJunior.innerHTML = '$' + Math.round(metrics.junior_debt).toLocaleString('en-US') +
-                        '<span class="percentage-badge">' + juniorPct + '%</span>';
-                }
-                if (priceBreakdownSeller) {
-                    const sellerPct = inputs.price > 0 ? ((metrics.seller_carry / inputs.price) * 100).toFixed(1) : '0.0';
-                    priceBreakdownSeller.innerHTML = '$' + Math.round(metrics.seller_carry).toLocaleString('en-US') +
-                        '<span class="percentage-badge">' + sellerPct + '%</span>';
-                }
+            // Calculate balloon payments on seller carry and junior debt loans
+            const sellerBalloon5yr = calculateRemainingBalance(sellerCarry, sellerInterest, sellerDuration, 60);
+            const sellerBalloon10yr = calculateRemainingBalance(sellerCarry, sellerInterest, sellerDuration, 120);
+            const juniorBalloon5yr = calculateRemainingBalance(juniorDebt, juniorInterest, juniorDuration, 60);
+            const juniorBalloon10yr = calculateRemainingBalance(juniorDebt, juniorInterest, juniorDuration, 120);
 
-                // Update Total to Seller (5 Years)
-                const seller5yrValueEl = document.getElementById('total_seller_5yr_value');
-                const seller5yrDetailsEl = document.getElementById('total_seller_5yr_details');
-                if (seller5yrValueEl) {
-                    seller5yrValueEl.textContent = '$' + Math.round(metrics.total_seller_5yr).toLocaleString('en-US');
-                }
-                if (seller5yrDetailsEl) {
-                    seller5yrDetailsEl.innerHTML =
-                        'Down: $' + Math.round(metrics.down_payment).toLocaleString('en-US') + '<br>' +
-                        'SBA Loan (Full): $' + Math.round(metrics.loan).toLocaleString('en-US') + '<br>' +
-                        'Junior Debt (Full): $' + Math.round(metrics.junior_debt).toLocaleString('en-US') + '<br>' +
-                        'Seller Carry Principal: $' + Math.round((metrics.seller_monthly_payment * 60) - metrics.seller_5yr_interest).toLocaleString('en-US') + '<br>' +
-                        'Seller Carry Interest: $' + Math.round(metrics.seller_5yr_interest).toLocaleString('en-US') + '<br>' +
-                        'Seller Carry Balloon: $' + Math.round(metrics.seller_balloon_5yr).toLocaleString('en-US') + '<br>' +
-                        'Consulting: $' + Math.round(inputs.consulting_fee).toLocaleString('en-US');
-                }
+            // Calculate cashflow (includes junior debt payment)
+            const monthlyCashflow = (sde / 12) - sbaMonthlyPayment - sellerMonthlyPayment - juniorMonthlyPayment - (optionalSalary / 12) - (extraCosts / 12) - (capex / 12);
+            const annualCashflow = sde - (sbaMonthlyPayment * 12) - (sellerMonthlyPayment * 12) - (juniorMonthlyPayment * 12) - optionalSalary - extraCosts - capex;
 
-                // Update Total to Seller (10 Years)
-                const seller10yrValueEl = document.getElementById('total_seller_10yr_value');
-                const seller10yrDetailsEl = document.getElementById('total_seller_10yr_details');
-                if (seller10yrValueEl) {
-                    seller10yrValueEl.textContent = '$' + Math.round(metrics.total_seller_10yr).toLocaleString('en-US');
-                }
-                if (seller10yrDetailsEl) {
-                    seller10yrDetailsEl.innerHTML =
-                        'Down: $' + Math.round(metrics.down_payment).toLocaleString('en-US') + '<br>' +
-                        'SBA Loan (Full): $' + Math.round(metrics.loan).toLocaleString('en-US') + '<br>' +
-                        'Junior Debt (Full): $' + Math.round(metrics.junior_debt).toLocaleString('en-US') + '<br>' +
-                        'Seller Carry Principal: $' + Math.round((metrics.seller_monthly_payment * Math.min(120, inputs.seller_duration)) - metrics.seller_10yr_interest).toLocaleString('en-US') + '<br>' +
-                        'Seller Carry Interest: $' + Math.round(metrics.seller_10yr_interest).toLocaleString('en-US') + '<br>' +
-                        'Consulting: $' + Math.round(inputs.consulting_fee).toLocaleString('en-US');
-                }
+            // Calculate DSCR (Debt Service Coverage Ratio) - includes junior debt
+            const netOperatingIncome = sde - optionalSalary - extraCosts - capex;
+            const totalDebtService = (sbaMonthlyPayment * 12) + (sellerMonthlyPayment * 12) + (juniorMonthlyPayment * 12);
+            const dscr = totalDebtService > 0 ? netOperatingIncome / totalDebtService : 0;
 
-                // Validation check
-                const validationEl = document.getElementById('validation');
-                if (validationEl) {
-                    const totalCheck = metrics.loan + metrics.seller_carry + metrics.junior_debt + metrics.down_payment;
-                    validationEl.textContent = 'Validation: Loan + Seller Carry + Junior Debt + Down Payment = ' + formatCurrency(totalCheck) +
-                        (metrics.validation_pass ? ' ✓ Equals Price' : ' ✗ Does NOT equal Price (' + formatCurrency(inputs.price) + ')');
-                    validationEl.className = 'validation-check ' + (metrics.validation_pass ? 'validation-pass' : 'validation-fail');
+            // Total payments over 5 and 10 years (includes junior debt)
+            const totalPaid5yr = (sbaMonthlyPayment * 60) + (sellerMonthlyPayment * 60) + (juniorMonthlyPayment * 60) + downPayment + (extraCosts * 5) + consultingFee + sellerBalloon5yr + juniorBalloon5yr;
+            const totalPaid10yr = (sbaMonthlyPayment * 120) + (sellerMonthlyPayment * 120) + (juniorMonthlyPayment * 120) + downPayment + (extraCosts * 10) + consultingFee;
+
+            // Total to seller - NOW INCLUDES JUNIOR DEBT
+            // At 5 years: Down + Full SBA Loan + Full Junior Debt + Seller Carry payments (5 years) + Seller Carry Balloon + Consulting
+            const totalSeller5yr = downPayment + loan + juniorDebt + (sellerMonthlyPayment * 60) + sellerBalloon5yr + consultingFee;
+
+            // At 10 years: Down + Full SBA Loan + Full Junior Debt + Seller Carry payments (full duration) + Consulting
+            const totalSeller10yr = downPayment + loan + juniorDebt + (sellerMonthlyPayment * Math.min(120, sellerDuration)) + consultingFee;
+
+            // Update results section - Monthly Cashflow
+            const monthlyCashflowContainer = document.getElementById('monthly_cashflow_container');
+            const monthlyCashflowValue = document.getElementById('monthly_cashflow_value');
+            const monthlyCashflowDetails = document.getElementById('monthly_cashflow_details');
+
+            if (monthlyCashflowContainer) {
+                monthlyCashflowContainer.style.borderLeftColor = monthlyCashflow >= 0 ? '#2196F3' : '#f44336';
+            }
+            if (monthlyCashflowValue) {
+                monthlyCashflowValue.textContent = '$' + Math.round(monthlyCashflow).toLocaleString('en-US');
+                monthlyCashflowValue.style.color = monthlyCashflow >= 0 ? '#1565c0' : '#c62828';
+            }
+            if (monthlyCashflowDetails) {
+                monthlyCashflowDetails.innerHTML =
+                    'SDE: $' + Math.round(sde / 12).toLocaleString('en-US') + '<br>' +
+                    'SBA Payment: -$' + Math.round(sbaMonthlyPayment).toLocaleString('en-US') + '<br>' +
+                    'Junior Debt Payment: -$' + Math.round(juniorMonthlyPayment).toLocaleString('en-US') + '<br>' +
+                    'Seller Payment: -$' + Math.round(sellerMonthlyPayment).toLocaleString('en-US') + '<br>' +
+                    'Salary: -$' + Math.round(optionalSalary / 12).toLocaleString('en-US') + '<br>' +
+                    'Extra Costs: -$' + Math.round(extraCosts / 12).toLocaleString('en-US') + '<br>' +
+                    'Capex: -$' + Math.round(capex / 12).toLocaleString('en-US');
+            }
+
+            // Update results section - Annual Cashflow
+            const annualEl = document.querySelector('.results-section > div:nth-child(2) > div:nth-child(2)');
+            if (annualEl) {
+                annualEl.style.borderLeftColor = annualCashflow >= 0 ? '#2196F3' : '#f44336';
+                const annualValueEl = annualEl.querySelector('div > div:nth-child(1) > div:nth-child(2)');
+                const annualSalaryEl = annualEl.querySelector('div > div:nth-child(2) > div:nth-child(2)');
+                const color = annualCashflow >= 0 ? '#1565c0' : '#c62828';
+                if (annualValueEl) {
+                    annualValueEl.textContent = '$' + Math.round(annualCashflow).toLocaleString('en-US');
+                    annualValueEl.style.color = color;
                 }
-            })
-            .catch(error => {
-                console.error('Calculation error:', error);
-            });
+                if (annualSalaryEl) {
+                    annualSalaryEl.textContent = '$' + Math.round(annualCashflow + optionalSalary).toLocaleString('en-US');
+                    annualSalaryEl.style.color = color;
+                }
+            }
+
+            // Update DSCR
+            const dscrEl = document.querySelector('.results-section > div:nth-child(2) > div:nth-child(3)');
+            if (dscrEl) {
+                let dscrColor, dscrBorderColor;
+                if (dscr >= 1.5) {
+                    dscrColor = '#2e7d32'; // Strong green
+                    dscrBorderColor = '#4CAF50';
+                } else if (dscr >= 1.25) {
+                    dscrColor = '#f57c00'; // Orange
+                    dscrBorderColor = '#FF9800';
+                } else {
+                    dscrColor = '#c62828'; // Red
+                    dscrBorderColor = '#f44336';
+                }
+                dscrEl.style.borderLeftColor = dscrBorderColor;
+                const dscrValueEl = dscrEl.querySelector('div:nth-child(2)');
+                if (dscrValueEl) {
+                    dscrValueEl.textContent = dscr.toFixed(2);
+                    dscrValueEl.style.color = dscrColor;
+                }
+            }
+
+            // Update Price Breakdown section
+            const priceBreakdownDown = document.getElementById('price_breakdown_down');
+            const priceBreakdownSba = document.getElementById('price_breakdown_sba');
+            const priceBreakdownJunior = document.getElementById('price_breakdown_junior');
+            const priceBreakdownSeller = document.getElementById('price_breakdown_seller');
+
+            if (priceBreakdownDown) {
+                const downPct = price > 0 ? ((downPayment / price) * 100).toFixed(1) : '0.0';
+                priceBreakdownDown.innerHTML = '$' + Math.round(downPayment).toLocaleString('en-US') +
+                    '<span style="font-size: 10px; color: #888; margin-left: 8px;">' + downPct + '%</span>';
+            }
+            if (priceBreakdownSba) {
+                const sbaPct = price > 0 ? ((loan / price) * 100).toFixed(1) : '0.0';
+                priceBreakdownSba.innerHTML = '$' + Math.round(loan).toLocaleString('en-US') +
+                    '<span style="font-size: 10px; color: #888; margin-left: 8px;">' + sbaPct + '%</span>';
+            }
+            if (priceBreakdownJunior) {
+                const juniorPct = price > 0 ? ((juniorDebt / price) * 100).toFixed(1) : '0.0';
+                priceBreakdownJunior.innerHTML = '$' + Math.round(juniorDebt).toLocaleString('en-US') +
+                    '<span style="font-size: 10px; color: #888; margin-left: 8px;">' + juniorPct + '%</span>';
+            }
+            if (priceBreakdownSeller) {
+                const sellerPct = price > 0 ? ((sellerCarry / price) * 100).toFixed(1) : '0.0';
+                priceBreakdownSeller.innerHTML = '$' + Math.round(sellerCarry).toLocaleString('en-US') +
+                    '<span style="font-size: 10px; color: #888; margin-left: 8px;">' + sellerPct + '%</span>';
+            }
+
+            // Update Total to Seller (5 Years) - using direct IDs
+            const seller5yrValueEl = document.getElementById('total_seller_5yr_value');
+            const seller5yrDetailsEl = document.getElementById('total_seller_5yr_details');
+            if (seller5yrValueEl) {
+                seller5yrValueEl.textContent = '$' + Math.round(totalSeller5yr).toLocaleString('en-US');
+            }
+            if (seller5yrDetailsEl) {
+                seller5yrDetailsEl.innerHTML =
+                    'Down: $' + Math.round(downPayment).toLocaleString('en-US') + '<br>' +
+                    'SBA Loan (Full): $' + Math.round(loan).toLocaleString('en-US') + '<br>' +
+                    'Junior Debt (Full): $' + Math.round(juniorDebt).toLocaleString('en-US') + '<br>' +
+                    'Seller Carry Principal: $' + Math.round((sellerMonthlyPayment * 60) - seller5yrInterest).toLocaleString('en-US') + '<br>' +
+                    'Seller Carry Interest: $' + Math.round(seller5yrInterest).toLocaleString('en-US') + '<br>' +
+                    'Seller Carry Balloon: $' + Math.round(sellerBalloon5yr).toLocaleString('en-US') + '<br>' +
+                    'Consulting: $' + Math.round(consultingFee).toLocaleString('en-US');
+            }
+
+            // Update Total to Seller (10 Years) - using direct IDs
+            const seller10yrValueEl = document.getElementById('total_seller_10yr_value');
+            const seller10yrDetailsEl = document.getElementById('total_seller_10yr_details');
+            if (seller10yrValueEl) {
+                seller10yrValueEl.textContent = '$' + Math.round(totalSeller10yr).toLocaleString('en-US');
+            }
+            if (seller10yrDetailsEl) {
+                seller10yrDetailsEl.innerHTML =
+                    'Down: $' + Math.round(downPayment).toLocaleString('en-US') + '<br>' +
+                    'SBA Loan (Full): $' + Math.round(loan).toLocaleString('en-US') + '<br>' +
+                    'Junior Debt (Full): $' + Math.round(juniorDebt).toLocaleString('en-US') + '<br>' +
+                    'Seller Carry Principal: $' + Math.round((sellerMonthlyPayment * Math.min(120, sellerDuration)) - seller10yrInterest).toLocaleString('en-US') + '<br>' +
+                    'Seller Carry Interest: $' + Math.round(seller10yrInterest).toLocaleString('en-US') + '<br>' +
+                    'Consulting: $' + Math.round(consultingFee).toLocaleString('en-US');
+            }
+
+            // Validation check - includes junior debt
+            const totalCheck = loan + sellerCarry + juniorDebt + downPayment;
+            const validationPass = Math.abs(totalCheck - price) < 0.01;
+            const validationEl = document.getElementById('validation');
+            validationEl.textContent = 'Validation: Loan + Seller Carry + Junior Debt + Down Payment = ' + formatCurrency(totalCheck) +
+                (validationPass ? ' ✓ Equals Price' : ' ✗ Does NOT equal Price (' + formatCurrency(price) + ')');
+            validationEl.className = 'validation-check ' + (validationPass ? 'validation-pass' : 'validation-fail');
         }
 
         // Handle business dropdown selection
@@ -1444,6 +1192,50 @@ $allBusinesses = $db->getAllBusinesses();
             // SBA loan amount includes the loan plus all fees
             $sba_loan_amount = $loan + $loan_fee + $closing_costs + $other_fees;
 
+            // Loan amortization function
+            function calculateLoanPayment($principal, $annual_interest_rate, $num_payments) {
+                if ($principal <= 0 || $num_payments <= 0) return 0;
+                $monthly_rate = ($annual_interest_rate / 100) / 12;
+                if ($monthly_rate == 0) return $principal / $num_payments;
+                return $principal * ($monthly_rate * pow(1 + $monthly_rate, $num_payments)) / (pow(1 + $monthly_rate, $num_payments) - 1);
+            }
+
+            // Calculate interest paid over time
+            function calculateInterestPaid($principal, $annual_interest_rate, $num_payments, $months_to_calculate) {
+                if ($principal <= 0 || $num_payments <= 0) return 0;
+                $monthly_rate = ($annual_interest_rate / 100) / 12;
+                $monthly_payment = calculateLoanPayment($principal, $annual_interest_rate, $num_payments);
+
+                $balance = $principal;
+                $total_interest = 0;
+
+                for ($i = 0; $i < min($months_to_calculate, $num_payments); $i++) {
+                    $interest_payment = $balance * $monthly_rate;
+                    $total_interest += $interest_payment;
+                    $principal_payment = $monthly_payment - $interest_payment;
+                    $balance -= $principal_payment;
+                }
+
+                return $total_interest;
+            }
+
+            // Calculate remaining balance at a specific month
+            function calculateRemainingBalance($principal, $annual_interest_rate, $num_payments, $months_paid) {
+                if ($principal <= 0 || $num_payments <= 0) return 0;
+                $monthly_rate = ($annual_interest_rate / 100) / 12;
+                $monthly_payment = calculateLoanPayment($principal, $annual_interest_rate, $num_payments);
+
+                $balance = $principal;
+
+                for ($i = 0; $i < min($months_paid, $num_payments); $i++) {
+                    $interest_payment = $balance * $monthly_rate;
+                    $principal_payment = $monthly_payment - $interest_payment;
+                    $balance -= $principal_payment;
+                }
+
+                return max(0, $balance);
+            }
+
             // Seller loan calculations
             $seller_monthly_payment = calculateLoanPayment($seller_carry, $seller_interest, $seller_duration);
             $seller_annual_payment = $seller_monthly_payment * 12;
@@ -1512,13 +1304,13 @@ $allBusinesses = $db->getAllBusinesses();
             <div class="results-section">
                 <h2>Buyer Cashflow Analysis</h2>
 
-                <div class="grid-3-col">
-                    <div id="monthly_cashflow_container" class="result-card <?php echo $monthly_cashflow >= 0 ? 'result-card-positive' : 'result-card-negative'; ?>">
-                        <div class="label-small">MONTHLY CASHFLOW</div>
-                        <div id="monthly_cashflow_value" class="value-large <?php echo $monthly_cashflow >= 0 ? 'value-positive' : 'value-negative'; ?>">
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                    <div id="monthly_cashflow_container" style="background-color: white; padding: 12px; border-radius: 4px; border-left: 3px solid <?php echo $monthly_cashflow >= 0 ? '#2196F3' : '#f44336'; ?>;">
+                        <div style="font-size: 10px; color: #666; margin-bottom: 4px;">MONTHLY CASHFLOW</div>
+                        <div id="monthly_cashflow_value" style="font-size: 20px; font-weight: bold; color: <?php echo $monthly_cashflow >= 0 ? '#1565c0' : '#c62828'; ?>;">
                             $<?php echo number_format($monthly_cashflow, 0); ?>
                         </div>
-                        <div id="monthly_cashflow_details" class="detail-text">
+                        <div id="monthly_cashflow_details" style="font-size: 9px; color: #888; margin-top: 6px;">
                             SDE: $<?php echo number_format($sde / 12, 0); ?><br>
                             SBA Payment: -$<?php echo number_format($sba_monthly_payment, 0); ?><br>
                             Junior Debt Payment: -$<?php echo number_format($junior_monthly_payment, 0); ?><br>
@@ -1529,29 +1321,29 @@ $allBusinesses = $db->getAllBusinesses();
                         </div>
                     </div>
 
-                    <div class="result-card <?php echo $annual_cashflow >= 0 ? 'result-card-positive' : 'result-card-negative'; ?>">
-                        <div class="grid-2-col">
-                            <div class="col-spacing">
-                                <div class="label-small">ANNUAL CASHFLOW</div>
-                                <div class="value-large <?php echo $annual_cashflow >= 0 ? 'value-positive' : 'value-negative'; ?>">
+                    <div style="background-color: white; padding: 12px; border-radius: 4px; border-left: 3px solid <?php echo $annual_cashflow >= 0 ? '#2196F3' : '#f44336'; ?>;">
+                        <div style="display: grid; grid-template-columns: auto auto; gap: 0px; justify-content: start;">
+                            <div style="padding-right: 15px;">
+                                <div style="font-size: 10px; color: #666; margin-bottom: 4px;">ANNUAL CASHFLOW</div>
+                                <div style="font-size: 20px; font-weight: bold; color: <?php echo $annual_cashflow >= 0 ? '#1565c0' : '#c62828'; ?>;">
                                     $<?php echo number_format($annual_cashflow, 0); ?>
                                 </div>
                             </div>
                             <div>
-                                <div class="label-small">+SALARY</div>
-                                <div class="value-large <?php echo $annual_cashflow >= 0 ? 'value-positive' : 'value-negative'; ?>">
+                                <div style="font-size: 10px; color: #666; margin-bottom: 4px;">+SALARY</div>
+                                <div style="font-size: 20px; font-weight: bold; color: <?php echo $annual_cashflow >= 0 ? '#1565c0' : '#c62828'; ?>;">
                                     $<?php echo number_format($annual_cashflow + $optional_salary, 0); ?>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="result-card" style="border-left-color: <?php echo $dscr_border_color; ?>;">
-                        <div class="label-small">DSCR (Debt Coverage)</div>
-                        <div class="value-large" style="color: <?php echo $dscr_color; ?>;">
+                    <div style="background-color: white; padding: 12px; border-radius: 4px; border-left: 3px solid <?php echo $dscr_border_color; ?>;">
+                        <div style="font-size: 10px; color: #666; margin-bottom: 4px;">DSCR (Debt Coverage)</div>
+                        <div style="font-size: 20px; font-weight: bold; color: <?php echo $dscr_color; ?>;">
                             <?php echo number_format($dscr, 2); ?>
                         </div>
-                        <div class="detail-text">
+                        <div style="font-size: 9px; color: #888; margin-top: 4px;">
                             <?php echo $dscr_status; ?> | Min: 1.25
                         </div>
                     </div>
@@ -1559,42 +1351,42 @@ $allBusinesses = $db->getAllBusinesses();
 
                 <h2 style="margin-top: 20px;">Price Breakdown</h2>
 
-                <div class="result-card" style="margin-bottom: 20px;">
-                    <div class="label-small">TOTAL PRICE</div>
-                    <div class="flex-between">
-                        <span id="price_breakdown_total" class="value-large">
+                <div style="background-color: white; padding: 12px; border-radius: 4px; border-left: 3px solid #2196F3; margin-bottom: 20px;">
+                    <div style="font-size: 10px; color: #666; margin-bottom: 4px;">TOTAL PRICE</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <span style="font-size: 20px; font-weight: bold; color: #2c3e50;">
                             $<?php echo number_format($price, 0); ?>
                         </span>
-                        <span class="breakdown-total-pct">100%</span>
+                        <span style="font-size: 14px; color: #666; font-weight: bold;">100%</span>
                     </div>
 
-                    <div class="breakdown-divider">
-                        <div class="flex-between-sm">
-                            <span class="breakdown-label">Down:</span>
-                            <span id="price_breakdown_down" class="breakdown-value">
+                    <div style="border-top: 1px solid #e0e0e0; padding-top: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 11px; color: #555; font-weight: 600;">Down:</span>
+                            <span id="price_breakdown_down" style="font-size: 13px; font-weight: bold; color: #2c3e50;">
                                 $<?php echo number_format($down_payment, 0); ?>
-                                <span class="percentage-badge"><?php echo number_format($pct_down_payment, 1); ?>%</span>
+                                <span style="font-size: 10px; color: #888; margin-left: 8px;"><?php echo number_format($pct_down_payment, 1); ?>%</span>
                             </span>
                         </div>
-                        <div class="flex-between-sm">
-                            <span class="breakdown-label">SBA Loan:</span>
-                            <span id="price_breakdown_sba" class="breakdown-value">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 11px; color: #555; font-weight: 600;">SBA Loan:</span>
+                            <span id="price_breakdown_sba" style="font-size: 13px; font-weight: bold; color: #2c3e50;">
                                 $<?php echo number_format($loan, 0); ?>
-                                <span class="percentage-badge"><?php echo number_format(($loan / $price) * 100, 1); ?>%</span>
+                                <span style="font-size: 10px; color: #888; margin-left: 8px;"><?php echo number_format(($loan / $price) * 100, 1); ?>%</span>
                             </span>
                         </div>
-                        <div class="flex-between-sm">
-                            <span class="breakdown-label">Junior Debt:</span>
-                            <span id="price_breakdown_junior" class="breakdown-value">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <span style="font-size: 11px; color: #555; font-weight: 600;">Junior Debt:</span>
+                            <span id="price_breakdown_junior" style="font-size: 13px; font-weight: bold; color: #2c3e50;">
                                 $<?php echo number_format($junior_debt, 0); ?>
-                                <span class="percentage-badge"><?php echo number_format($pct_junior_debt, 1); ?>%</span>
+                                <span style="font-size: 10px; color: #888; margin-left: 8px;"><?php echo number_format($pct_junior_debt, 1); ?>%</span>
                             </span>
                         </div>
-                        <div class="flex-between-sm">
-                            <span class="breakdown-label">Seller Carry:</span>
-                            <span id="price_breakdown_seller" class="breakdown-value">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; color: #555; font-weight: 600;">Seller Carry:</span>
+                            <span id="price_breakdown_seller" style="font-size: 13px; font-weight: bold; color: #2c3e50;">
                                 $<?php echo number_format($seller_carry, 0); ?>
-                                <span class="percentage-badge"><?php echo number_format($pct_seller_carry, 1); ?>%</span>
+                                <span style="font-size: 10px; color: #888; margin-left: 8px;"><?php echo number_format($pct_seller_carry, 1); ?>%</span>
                             </span>
                         </div>
                     </div>
@@ -1666,6 +1458,6 @@ $allBusinesses = $db->getAllBusinesses();
         </div>
     </div>
 
-    <div class="version">v1.16</div>
+    <div class="version">v1.14</div>
 </body>
 </html>
