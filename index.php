@@ -984,7 +984,7 @@ input[type="text"], input[type="number"], select, textarea{width:100%;padding:8p
 </div>
 
 <div class="footer">
-  <div style="margin-bottom: 8px;">Business Valuation Calculator v1.20</div>
+  <div style="margin-bottom: 8px;">Business Valuation Calculator v1.21</div>
   <div>&copy; 2025 All rights reserved.</div>
 </div>
 
