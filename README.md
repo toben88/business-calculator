@@ -9,14 +9,14 @@ Calculates the cashflow of a business being purchased using multiple financing s
 - **Business Valuation Analysis**
   - SDE (Seller's Discretionary Earnings) calculations
   - Price multiple analysis
-  - Cash flow projections with detailed monthly breakdown
+  - Cash flow projections with detailed monthly and annual breakdowns
 
 - **Loan Structure Management**
   - SBA loan calculations with customizable terms
   - Junior debt financing support
   - Seller financing options with balloon payment support
   - Down payment scenarios
-  - Real-time calculation updates
+  - Real-time AJAX-based calculation updates
 
 - **Financial Metrics**
   - Monthly and annual cash flow projections with detailed breakdowns
@@ -25,10 +25,19 @@ Calculates the cashflow of a business being purchased using multiple financing s
   - Payment to seller calculations (5-year and 10-year scenarios)
   - Price breakdown showing all financing components
 
+- **Modern UI (v1.21)**
+  - Clean, modern light theme design
+  - Fully responsive mobile layout (optimized for phones and tablets)
+  - Mobile-optimized spacing and typography
+  - Consistent shadow styling and visual hierarchy
+  - Side-by-side annual cashflow display
+  - Three-column loan section layout (desktop) / stacked (mobile)
+
 - **Data Management**
   - SQLite database for persistent storage
   - Save and compare multiple business scenarios
   - Web-based data viewer (viewdata.php)
+  - CSRF protection and secure sessions
 
 ## Requirements
 
