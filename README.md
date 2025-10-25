@@ -25,13 +25,16 @@ Calculates the cashflow of a business being purchased using multiple financing s
   - Payment to seller calculations (5-year and 10-year scenarios)
   - Price breakdown showing all financing components
 
-- **Modern UI (v1.21)**
+- **Modern UI (v1.23)**
   - Clean, modern light theme design
   - Fully responsive mobile layout (optimized for phones and tablets)
-  - Mobile-optimized spacing and typography
+  - Mobile-optimized spacing and typography (13px margins on mobile vs 25px desktop)
   - Consistent shadow styling and visual hierarchy
   - Side-by-side annual cashflow display
   - Three-column loan section layout (desktop) / stacked (mobile)
+  - Auto-calculated field styling with light blue background and AUTO badges
+  - Dynamic validation display with real-time feedback
+  - Content Security Policy configured for Google Fonts
 
 - **Data Management**
   - SQLite database for persistent storage

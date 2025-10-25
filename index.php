@@ -1,7 +1,7 @@
 <?php
 /*
  * ============================================
- * BUSINESS VALUATION CALCULATOR v1.21
+ * BUSINESS VALUATION CALCULATOR v1.23
  * ============================================
  *
  * FILE STRUCTURE:
@@ -87,7 +87,7 @@ header('X-XSS-Protection: 1; mode=block');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 
 // Content Security Policy
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';");
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;");
 
 // Strict Transport Security (HSTS) - removed to allow HTTP (local development)
 // header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
@@ -454,16 +454,16 @@ html,body{height:100%;font-family:Inter,system-ui,-apple-system,'Segoe UI',Robot
 
 /* Header */
 .header{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
-.header-top{display:flex;align-items:center;gap:10px;flex:1;}
-.brand{display:flex;align-items:center;gap:10px;margin-right:auto;}
+.header-top{display:flex;align-items:center;gap:200px;flex:1;}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:280px;}
 .logo{width:46px;height:46px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;box-shadow:0 6px 18px rgba(12,18,24,0.6);}
-.title{font-size:1rem;font-weight:700;}
+.title{font-size:1rem;font-weight:700;white-space:nowrap;}
 .subtitle{font-size:0.75rem;color:var(--muted);}
 @media (max-width:900px){
   body{padding:5px;}
   .container{padding:8px;}
   .header{flex-direction:column;align-items:stretch;gap:8px;}
-  .header-top{flex-wrap:wrap;}
+  .header-top{flex-wrap:wrap;gap:10px;}
   .brand{margin-right:0;}
   .header-buttons{justify-content:center;}
 }
@@ -506,6 +506,11 @@ input[type="text"], input[type="number"], select, textarea{width:100%;padding:8p
 .input-group .prefix{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:700;}
 .input-group input{padding-left:36px;}
 
+/* Auto-calculated field styling */
+.auto-calc-wrapper{position:relative;}
+input.auto-calc-input{background:rgba(6,182,212,0.08)!important;border:1px solid rgba(6,182,212,0.3)!important;padding-right:60px;}
+.auto-calc-badge{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:0.65rem;color:white;background:#06b6d4;padding:3px 8px;border-radius:4px;font-weight:700;}
+
 </style>
 </head>
 <body>
@@ -540,9 +545,9 @@ input[type="text"], input[type="number"], select, textarea{width:100%;padding:8p
     <input type="hidden" name="business_id" id="business_id" value="<?php echo $selectedBusinessId ?? ''; ?>">
     <div>
       <div class="card">
+        <h3>Name of Business</h3>
         <div class="form-row">
           <div class="field">
-            <label for="business_name">Name of Business</label>
             <input id="business_name" name="business_name" type="text" value="<?php echo htmlspecialchars($loadedData['business_name'] ?? $_POST['business_name'] ?? ''); ?>" placeholder="Enter business name">
           </div>
         </div>
@@ -567,7 +572,10 @@ input[type="text"], input[type="number"], select, textarea{width:100%;padding:8p
         <div class="form-row">
           <div class="field">
             <label for="multiple">Multiple (Price/SDE)</label>
-            <input id="multiple" name="multiple" type="number" step="1" value="<?php echo htmlspecialchars($_POST['multiple'] ?? ''); ?>" readonly style="background: var(--glass);">
+            <div class="auto-calc-wrapper">
+              <input id="multiple" name="multiple" type="number" step="1" value="<?php echo htmlspecialchars($_POST['multiple'] ?? ''); ?>" readonly class="auto-calc-input">
+              <span class="auto-calc-badge">AUTO</span>
+            </div>
           </div>
           <div class="field">
             <label for="capex">Averaged Capex (Annual)</label>
@@ -612,85 +620,83 @@ input[type="text"], input[type="number"], select, textarea{width:100%;padding:8p
 
         <div class="form-row">
           <div class="field">
-            <label for="down_payment">Down Payment:</label>
-            <div class="input-group">
-              <span class="prefix">$</span>
-              <input id="down_payment" name="down_payment" type="number" step="1" value="<?php echo htmlspecialchars($_POST['down_payment'] ?? '175000'); ?>">
+            <label for="down_payment">Down Payment</label>
+            <div class="auto-calc-wrapper">
+              <div class="input-group">
+                <span class="prefix">$</span>
+                <input id="down_payment" name="down_payment" type="number" step="1" value="<?php echo htmlspecialchars($_POST['down_payment'] ?? '175000'); ?>" readonly class="auto-calc-input">
+              </div>
+              <span class="auto-calc-badge">AUTO</span>
             </div>
           </div>
           <div class="field">
             <label for="pct_down_payment">% Down Payment:</label>
-            <input id="pct_down_payment" name="pct_down_payment" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['pct_down_payment'] ?? $_POST['pct_down_payment'] ?? '10'); ?>">
+            <input id="pct_down_payment" name="pct_down_payment" type="number" step="0.01" value="<?php echo htmlspecialchars($loadedData['pct_down_payment'] ?? $_POST['pct_down_payment'] ?? '10'); ?>">
           </div>
         </div>
 
         <div class="form-row">
           <div class="field">
-            <label for="seller_carry">Seller Carry:</label>
-            <div class="input-group">
-              <span class="prefix">$</span>
-              <input id="seller_carry" name="seller_carry" type="number" step="1" value="<?php echo htmlspecialchars($_POST['seller_carry'] ?? '175000'); ?>">
+            <label for="seller_carry">Seller Carry</label>
+            <div class="auto-calc-wrapper">
+              <div class="input-group">
+                <span class="prefix">$</span>
+                <input id="seller_carry" name="seller_carry" type="number" step="1" value="<?php echo htmlspecialchars($_POST['seller_carry'] ?? '175000'); ?>" readonly class="auto-calc-input">
+              </div>
+              <span class="auto-calc-badge">AUTO</span>
             </div>
           </div>
           <div class="field">
             <label for="pct_seller_carry">% Seller Carry:</label>
-            <input id="pct_seller_carry" name="pct_seller_carry" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['pct_seller_carry'] ?? $_POST['pct_seller_carry'] ?? '10'); ?>">
+            <input id="pct_seller_carry" name="pct_seller_carry" type="number" step="0.01" value="<?php echo htmlspecialchars($loadedData['pct_seller_carry'] ?? $_POST['pct_seller_carry'] ?? '10'); ?>">
           </div>
         </div>
 
         <div class="form-row">
           <div class="field">
-            <label for="junior_debt">Junior Debt:</label>
-            <div class="input-group">
-              <span class="prefix">$</span>
-              <input id="junior_debt" name="junior_debt" type="number" step="1" value="<?php echo htmlspecialchars($_POST['junior_debt'] ?? '0'); ?>">
+            <label for="seller_duration_months">Seller Duration (Months):</label>
+            <input id="seller_duration_months" name="seller_duration" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['seller_duration'] ?? $_POST['seller_duration'] ?? '120'); ?>">
+          </div>
+          <div class="field">
+            <label for="seller_interest">Seller Interest (%):</label>
+            <input id="seller_interest" name="seller_interest" type="number" step="0.01" value="<?php echo htmlspecialchars($loadedData['seller_interest'] ?? $_POST['seller_interest'] ?? '7'); ?>">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label for="junior_debt">Junior Debt</label>
+            <div class="auto-calc-wrapper">
+              <div class="input-group">
+                <span class="prefix">$</span>
+                <input id="junior_debt" name="junior_debt" type="number" step="1" value="<?php echo htmlspecialchars($_POST['junior_debt'] ?? '0'); ?>" readonly class="auto-calc-input">
+              </div>
+              <span class="auto-calc-badge">AUTO</span>
             </div>
           </div>
           <div class="field">
             <label for="pct_junior_debt">% Junior Debt:</label>
-            <input id="pct_junior_debt" name="pct_junior_debt" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['pct_junior_debt'] ?? $_POST['pct_junior_debt'] ?? '0'); ?>">
+            <input id="pct_junior_debt" name="pct_junior_debt" type="number" step="0.01" value="<?php echo htmlspecialchars($loadedData['pct_junior_debt'] ?? $_POST['pct_junior_debt'] ?? '0'); ?>">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label for="junior_duration_months">Junior Duration (Months):</label>
+            <input id="junior_duration_months" name="junior_duration" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['junior_duration'] ?? $_POST['junior_duration'] ?? '120'); ?>">
+          </div>
+          <div class="field">
+            <label for="junior_interest">Junior Interest (%):</label>
+            <input id="junior_interest" name="junior_interest" type="number" step="0.01" value="<?php echo htmlspecialchars($loadedData['junior_interest'] ?? $_POST['junior_interest'] ?? '8'); ?>">
           </div>
         </div>
 
       </div>
 
       <div class="card" style="margin-top: 12px;">
-        <h3>SBA Loan</h3>
-
-        <div class="form-row">
-          <div class="field">
-            <label for="loan_fee">Loan Fee:</label>
-            <div class="input-group">
-              <span class="prefix">$</span>
-              <input id="loan_fee" name="loan_fee" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['loan_fee'] ?? $_POST['loan_fee'] ?? '13485'); ?>">
-            </div>
-          </div>
+        <div id="validation_display" style="padding: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; color: var(--success); font-size: 0.9rem;">
+          <strong>✓</strong> <span id="validation_text">Validation: Calculating...</span>
         </div>
-
-        <div class="form-row">
-          <div class="field">
-            <label for="closing_costs">Closing Costs:</label>
-            <div class="input-group">
-              <span class="prefix">$</span>
-              <input id="closing_costs" name="closing_costs" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['closing_costs'] ?? $_POST['closing_costs'] ?? '15000'); ?>">
-            </div>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="field">
-            <label for="other_fees">Other Fees:</label>
-            <div class="input-group">
-              <span class="prefix">$</span>
-              <input id="other_fees" name="other_fees" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['other_fees'] ?? $_POST['other_fees'] ?? '15000'); ?>">
-            </div>
-          </div>
-        </div>
-
-        <div style="margin-top: 16px; padding: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; color: var(--success); font-size: 0.9rem;">
-          <strong>✓</strong> Validation: Loan + Seller Carry + Junior Debt + Down Payment = $1,750,000 ✓ Equals Price
-        </div>
-
       </div>
 
       <!-- Add any other form groups you need here, following the same pattern and preserving input names -->
@@ -747,6 +753,41 @@ input[type="text"], input[type="number"], select, textarea{width:100%;padding:8p
       </div>
 
       <div class="card" style="margin-top:10px;">
+        <h3>Payment to Seller</h3>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+          <!-- 5 Years with balloon -->
+          <div style="padding:10px;background:var(--glass);border-radius:10px;">
+            <div style="font-size:0.625rem;color:var(--muted);margin-bottom:8px;">TOTAL TO SELLER (5 YEARS with balloon)</div>
+            <div id="seller_5yr_total" style="font-size:1.125rem;font-weight:700;margin-bottom:8px;">$1,799,529</div>
+            <div id="seller_5yr_details" style="font-size:0.5625rem;color:var(--muted);line-height:1.6;">
+              Down: $175,000<br>
+              SBA Loan (Full): $1,400,000<br>
+              Junior Debt (Full): $0<br>
+              Seller Carry Principal: $72,385<br>
+              Seller Carry Interest: $49,529<br>
+              Seller Carry Balloon: $102,615<br>
+              Consulting: $0
+            </div>
+          </div>
+
+          <!-- 10 Years -->
+          <div style="padding:10px;background:var(--glass);border-radius:10px;">
+            <div style="font-size:0.625rem;color:var(--muted);margin-bottom:8px;">TOTAL TO SELLER (10 YEARS)</div>
+            <div id="seller_10yr_total" style="font-size:1.125rem;font-weight:700;margin-bottom:8px;">$1,818,828</div>
+            <div id="seller_10yr_details" style="font-size:0.5625rem;color:var(--muted);line-height:1.6;">
+              Down: $175,000<br>
+              SBA Loan (Full): $1,400,000<br>
+              Junior Debt (Full): $0<br>
+              Seller Carry Principal: $175,000<br>
+              Seller Carry Interest: $68,828<br>
+              Consulting: $0
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:10px;">
         <h3>Price Breakdown</h3>
 
         <div style="margin-top:8px;padding:8px;background:var(--glass);border-radius:10px;">
@@ -788,86 +829,167 @@ input[type="text"], input[type="number"], select, textarea{width:100%;padding:8p
           </div>
         </div>
       </div>
+    </aside>
 
-      <div class="card" style="margin-top:10px;">
-        <h3>Payment to Seller</h3>
+    <div class="loan-grid" style="margin-top:12px;grid-column:1/-1;">
+    <div class="card">
+      <h3>SBA Loan</h3>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
-          <!-- 5 Years with balloon -->
-          <div style="padding:10px;background:var(--glass);border-radius:10px;">
-            <div style="font-size:0.625rem;color:var(--muted);margin-bottom:8px;">TOTAL TO SELLER (5 YEARS with balloon)</div>
-            <div id="seller_5yr_total" style="font-size:1.125rem;font-weight:700;margin-bottom:8px;">$1,799,529</div>
-            <div id="seller_5yr_details" style="font-size:0.5625rem;color:var(--muted);line-height:1.6;">
-              Down: $175,000<br>
-              SBA Loan (Full): $1,400,000<br>
-              Junior Debt (Full): $0<br>
-              Seller Carry Principal: $72,385<br>
-              Seller Carry Interest: $49,529<br>
-              Seller Carry Balloon: $102,615<br>
-              Consulting: $0
-            </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="sba_duration_months">SBA Duration (Months):</label>
+          <input id="sba_duration_months" name="sba_duration" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['sba_duration'] ?? $_POST['sba_duration'] ?? '120'); ?>">
+        </div>
+        <div class="field">
+          <label for="sba_interest">SBA Interest (%):</label>
+          <input id="sba_interest" name="sba_interest" type="number" step="0.01" value="<?php echo htmlspecialchars($loadedData['sba_interest'] ?? $_POST['sba_interest'] ?? '10'); ?>">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="loan_fee">Loan Fee:</label>
+          <div class="input-group">
+            <span class="prefix">$</span>
+            <input id="loan_fee" name="loan_fee" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['loan_fee'] ?? $_POST['loan_fee'] ?? '13485'); ?>">
           </div>
-
-          <!-- 10 Years -->
-          <div style="padding:10px;background:var(--glass);border-radius:10px;">
-            <div style="font-size:0.625rem;color:var(--muted);margin-bottom:8px;">TOTAL TO SELLER (10 YEARS)</div>
-            <div id="seller_10yr_total" style="font-size:1.125rem;font-weight:700;margin-bottom:8px;">$1,818,828</div>
-            <div id="seller_10yr_details" style="font-size:0.5625rem;color:var(--muted);line-height:1.6;">
-              Down: $175,000<br>
-              SBA Loan (Full): $1,400,000<br>
-              Junior Debt (Full): $0<br>
-              Seller Carry Principal: $175,000<br>
-              Seller Carry Interest: $68,828<br>
-              Consulting: $0
-            </div>
+        </div>
+        <div class="field">
+          <label for="closing_costs">Closing Costs:</label>
+          <div class="input-group">
+            <span class="prefix">$</span>
+            <input id="closing_costs" name="closing_costs" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['closing_costs'] ?? $_POST['closing_costs'] ?? '15000'); ?>">
           </div>
         </div>
       </div>
-    </aside>
-  </form>
 
-  <div class="loan-grid" style="margin-top:12px;">
+      <div class="form-row">
+        <div class="field">
+          <label for="other_fees">Other Fees:</label>
+          <div class="input-group">
+            <span class="prefix">$</span>
+            <input id="other_fees" name="other_fees" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['other_fees'] ?? $_POST['other_fees'] ?? '15000'); ?>">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="sba_loan_amount_no_fees_display">Loan Amount (without fees)</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="sba_loan_amount_no_fees_display" type="number" step="1" value="1400000" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="sba_loan_amount_with_fees_display">Loan Amount (with fees)</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="sba_loan_amount_with_fees_display" type="number" step="1" value="1443485" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="sba_monthly_payment_display">Monthly Payment</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="sba_monthly_payment_display" type="number" step="1" value="19076" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="sba_5yr_interest_display">5 Years of Interest</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="sba_5yr_interest_display" type="number" step="1" value="598868" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="sba_10yr_interest_display">10 Years of Interest</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="sba_10yr_interest_display" type="number" step="1" value="845606" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <h3>Seller Loan</h3>
       <div class="form-row">
         <div class="field">
-          <label for="seller_carry_amount_display">Seller Carry Amount:</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="seller_carry_amount_display" type="number" step="1" value="175000" readonly style="background: var(--glass);">
+          <label for="seller_carry_amount_display">Seller Carry Amount</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="seller_carry_amount_display" type="number" step="1" value="175000" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
           </div>
         </div>
         <div class="field">
-          <label for="seller_duration_months_display">Duration in Months:</label>
-          <input id="seller_duration_months_display" type="number" step="1" value="120" readonly style="background: var(--glass);">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label for="seller_interest_display">Interest (%):</label>
-          <input id="seller_interest_display" type="number" step="0.01" value="7" readonly style="background: var(--glass);">
-        </div>
-        <div class="field">
-          <label for="seller_monthly_payment_display">Monthly Payment:</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="seller_monthly_payment_display" type="number" step="1" value="2032" readonly style="background: var(--glass);">
+          <label for="seller_duration_months_display">Duration in Months</label>
+          <div class="auto-calc-wrapper">
+            <input id="seller_duration_months_display" type="number" step="1" value="120" readonly class="auto-calc-input">
+            <span class="auto-calc-badge">AUTO</span>
           </div>
         </div>
       </div>
       <div class="form-row">
         <div class="field">
-          <label for="seller_5yr_interest_display">5 Years of Interest:</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="seller_5yr_interest_display" type="number" step="1" value="49529" readonly style="background: var(--glass);">
+          <label for="seller_interest_display">Interest (%)</label>
+          <div class="auto-calc-wrapper">
+            <input id="seller_interest_display" type="number" step="0.01" value="7" readonly class="auto-calc-input">
+            <span class="auto-calc-badge">AUTO</span>
           </div>
         </div>
         <div class="field">
-          <label for="seller_10yr_interest_display">10 Years of Interest:</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="seller_10yr_interest_display" type="number" step="1" value="68828" readonly style="background: var(--glass);">
+          <label for="seller_monthly_payment_display">Monthly Payment</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="seller_monthly_payment_display" type="number" step="1" value="2032" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="seller_5yr_interest_display">5 Years of Interest</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="seller_5yr_interest_display" type="number" step="1" value="49529" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
+          </div>
+        </div>
+        <div class="field">
+          <label for="seller_10yr_interest_display">10 Years of Interest</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="seller_10yr_interest_display" type="number" step="1" value="68828" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
           </div>
         </div>
       </div>
@@ -877,115 +999,74 @@ input[type="text"], input[type="number"], select, textarea{width:100%;padding:8p
       <h3>Junior Debt</h3>
       <div class="form-row">
         <div class="field">
-          <label for="junior_debt_amount_display">Junior Debt Amount:</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="junior_debt_amount_display" type="number" step="1" value="0" readonly style="background: var(--glass);">
+          <label for="junior_debt_amount_display">Junior Debt Amount</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="junior_debt_amount_display" type="number" step="1" value="0" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
           </div>
         </div>
         <div class="field">
-          <label for="junior_duration_months_display">Duration in Months:</label>
-          <input id="junior_duration_months_display" type="number" step="1" value="120" readonly style="background: var(--glass);">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label for="junior_interest_display">Interest (%):</label>
-          <input id="junior_interest_display" type="number" step="0.01" value="8" readonly style="background: var(--glass);">
-        </div>
-        <div class="field">
-          <label for="junior_monthly_payment_display">Monthly Payment:</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="junior_monthly_payment_display" type="number" step="1" value="0" readonly style="background: var(--glass);">
+          <label for="junior_duration_months_display">Duration in Months</label>
+          <div class="auto-calc-wrapper">
+            <input id="junior_duration_months_display" type="number" step="1" value="120" readonly class="auto-calc-input">
+            <span class="auto-calc-badge">AUTO</span>
           </div>
         </div>
       </div>
       <div class="form-row">
         <div class="field">
-          <label for="junior_5yr_interest_display">5 Years of Interest:</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="junior_5yr_interest_display" type="number" step="1" value="0" readonly style="background: var(--glass);">
+          <label for="junior_interest_display">Interest (%)</label>
+          <div class="auto-calc-wrapper">
+            <input id="junior_interest_display" type="number" step="0.01" value="8" readonly class="auto-calc-input">
+            <span class="auto-calc-badge">AUTO</span>
           </div>
         </div>
         <div class="field">
-          <label for="junior_10yr_interest_display">10 Years of Interest:</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="junior_10yr_interest_display" type="number" step="1" value="0" readonly style="background: var(--glass);">
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>SBA Loan</h3>
-      <div class="form-row">
-        <div class="field">
-          <label for="sba_loan_amount_no_fees_display">Loan Amount (without fees):</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="sba_loan_amount_no_fees_display" type="number" step="1" value="1400000" readonly style="background: var(--glass);">
-          </div>
-        </div>
-        <div class="field">
-          <label for="sba_loan_amount_with_fees_display">Loan Amount (with fees):</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="sba_loan_amount_with_fees_display" type="number" step="1" value="1443485" readonly style="background: var(--glass);">
+          <label for="junior_monthly_payment_display">Monthly Payment</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="junior_monthly_payment_display" type="number" step="1" value="0" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
           </div>
         </div>
       </div>
       <div class="form-row">
         <div class="field">
-          <label for="sba_duration_months_display">Duration in Months:</label>
-          <input id="sba_duration_months_display" type="number" step="1" value="120" readonly style="background: var(--glass);">
-        </div>
-        <div class="field">
-          <label for="sba_interest_display">Interest (%):</label>
-          <input id="sba_interest_display" type="number" step="0.01" value="10" readonly style="background: var(--glass);">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label for="sba_monthly_payment_display">Monthly Payment:</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="sba_monthly_payment_display" type="number" step="1" value="19076" readonly style="background: var(--glass);">
-          </div>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="field">
-          <label for="sba_5yr_interest_display">5 Years of Interest:</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="sba_5yr_interest_display" type="number" step="1" value="598868" readonly style="background: var(--glass);">
+          <label for="junior_5yr_interest_display">5 Years of Interest</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="junior_5yr_interest_display" type="number" step="1" value="0" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
           </div>
         </div>
         <div class="field">
-          <label for="sba_10yr_interest_display">10 Years of Interest:</label>
-          <div class="input-group">
-            <span class="prefix">$</span>
-            <input id="sba_10yr_interest_display" type="number" step="1" value="845606" readonly style="background: var(--glass);">
+          <label for="junior_10yr_interest_display">10 Years of Interest</label>
+          <div class="auto-calc-wrapper">
+            <div class="input-group">
+              <span class="prefix">$</span>
+              <input id="junior_10yr_interest_display" type="number" step="1" value="0" readonly class="auto-calc-input">
+            </div>
+            <span class="auto-calc-badge">AUTO</span>
           </div>
         </div>
       </div>
     </div>
   </div>
+  </form>
 
   <div class="footer card" style="margin-top:18px;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <div>Made for SBA-style business purchase analysis.</div>
-      <div>&copy; {year}</div>
+      <div>Business Valuation Calculator v1.23</div>
+      <div>&copy; 2025 All rights reserved.</div>
     </div>
   </div>
-</div>
-
-<div class="footer">
-  <div style="margin-bottom: 8px;">Business Valuation Calculator v1.21</div>
-  <div>&copy; 2025 All rights reserved.</div>
 </div>
 
 <script>
@@ -1047,6 +1128,7 @@ function calculateMultiple() {
 }
 
 function updateCalculations() {
+  console.log('updateCalculations() called');
   // Gather all input values (using new.php field names)
   const inputs = {
     sde: parseFloat(document.getElementById('sde').value) || 0,
@@ -1070,42 +1152,66 @@ function updateCalculations() {
   };
 
   // Call PHP via AJAX for calculations (single source of truth!)
-  fetch('new.php?ajax=calculate', {
+  fetch('index.php?ajax=calculate', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(inputs)
   })
   .then(response => response.json())
   .then(metrics => {
+    console.log('AJAX response received:', metrics);
     // Update calculated loan amounts
     document.getElementById('down_payment').value = Math.round(metrics.down_payment);
     document.getElementById('seller_carry').value = Math.round(metrics.seller_carry);
     document.getElementById('junior_debt').value = Math.round(metrics.junior_debt);
 
-    // Update Seller Loan section
-    document.getElementById('seller_carry_amount').value = Math.round(metrics.seller_carry);
-    document.getElementById('seller_monthly_payment').value = Math.round(metrics.seller_monthly_payment);
-    document.getElementById('seller_5yr_interest').value = Math.round(metrics.seller_5yr_interest);
-    document.getElementById('seller_10yr_interest').value = Math.round(metrics.seller_10yr_interest);
+    // Update Seller Loan section (display fields)
+    document.getElementById('seller_carry_amount_display').value = Math.round(metrics.seller_carry);
+    document.getElementById('seller_duration_months_display').value = inputs.seller_duration;
+    document.getElementById('seller_interest_display').value = inputs.seller_interest;
+    document.getElementById('seller_monthly_payment_display').value = Math.round(metrics.seller_monthly_payment);
+    document.getElementById('seller_5yr_interest_display').value = Math.round(metrics.seller_5yr_interest);
+    document.getElementById('seller_10yr_interest_display').value = Math.round(metrics.seller_10yr_interest);
 
-    // Update Junior Debt section
-    document.getElementById('junior_debt_amount').value = Math.round(metrics.junior_debt);
-    document.getElementById('junior_monthly_payment').value = Math.round(metrics.junior_monthly_payment);
-    document.getElementById('junior_5yr_interest').value = Math.round(metrics.junior_5yr_interest);
-    document.getElementById('junior_10yr_interest').value = Math.round(metrics.junior_10yr_interest);
+    // Update Junior Debt section (display fields)
+    document.getElementById('junior_debt_amount_display').value = Math.round(metrics.junior_debt);
+    document.getElementById('junior_duration_months_display').value = inputs.junior_duration;
+    document.getElementById('junior_interest_display').value = inputs.junior_interest;
+    document.getElementById('junior_monthly_payment_display').value = Math.round(metrics.junior_monthly_payment);
+    document.getElementById('junior_5yr_interest_display').value = Math.round(metrics.junior_5yr_interest);
+    document.getElementById('junior_10yr_interest_display').value = Math.round(metrics.junior_10yr_interest);
 
-    // Update SBA Loan section
-    document.getElementById('sba_loan_amount_no_fees').value = Math.round(metrics.loan);
-    document.getElementById('sba_loan_amount_with_fees').value = Math.round(metrics.sba_loan_amount);
-    document.getElementById('sba_monthly_payment').value = Math.round(metrics.sba_monthly_payment);
-    document.getElementById('sba_5yr_interest').value = Math.round(metrics.sba_5yr_interest);
-    document.getElementById('sba_10yr_interest').value = Math.round(metrics.sba_10yr_interest);
+    // Update SBA Loan section (display fields)
+    document.getElementById('sba_loan_amount_no_fees_display').value = Math.round(metrics.loan);
+    document.getElementById('sba_loan_amount_with_fees_display').value = Math.round(metrics.sba_loan_amount);
+    document.getElementById('sba_monthly_payment_display').value = Math.round(metrics.sba_monthly_payment);
+    document.getElementById('sba_5yr_interest_display').value = Math.round(metrics.sba_5yr_interest);
+    document.getElementById('sba_10yr_interest_display').value = Math.round(metrics.sba_10yr_interest);
+
+    // Update validation display
+    const validationDiv = document.getElementById('validation_display');
+    const validationText = document.getElementById('validation_text');
+    const total = Math.round(metrics.loan + metrics.seller_carry + metrics.junior_debt + metrics.down_payment);
+    const price = Math.round(inputs.price);
+
+    if (Math.abs(total - price) < 1) {
+      validationDiv.style.background = 'rgba(16, 185, 129, 0.1)';
+      validationDiv.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+      validationDiv.style.color = 'var(--success)';
+      validationText.innerHTML = `Validation: Loan ($${metrics.loan.toLocaleString()}) + Seller Carry ($${metrics.seller_carry.toLocaleString()}) + Junior Debt ($${metrics.junior_debt.toLocaleString()}) + Down Payment ($${metrics.down_payment.toLocaleString()}) = $${total.toLocaleString()} ✓ Equals Price ($${price.toLocaleString()})`;
+    } else {
+      validationDiv.style.background = 'rgba(239, 68, 68, 0.1)';
+      validationDiv.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+      validationDiv.style.color = '#ef4444';
+      validationText.innerHTML = `Validation: Loan ($${metrics.loan.toLocaleString()}) + Seller Carry ($${metrics.seller_carry.toLocaleString()}) + Junior Debt ($${metrics.junior_debt.toLocaleString()}) + Down Payment ($${metrics.down_payment.toLocaleString()}) = $${total.toLocaleString()} ✗ Does NOT Equal Price ($${price.toLocaleString()}) - Difference: $${(total - price).toLocaleString()}`;
+    }
 
     // Update results display (right sidebar)
     updateResultsDisplay(metrics, inputs);
   })
   .catch(error => {
     console.error('Calculation error:', error);
+    alert('Error updating calculations. Check console for details.');
   });
 }
 
