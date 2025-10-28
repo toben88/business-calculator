@@ -7,6 +7,16 @@
   - [ ] Allow range: 1 year up to (SBA loan years - 1).
   - [ ] Balloon input should validate against current SBA loan term.
 
+## Completed in v2.01
+- [x] Dynamic color-coded DSCR display (Green ≥1.5 "Great", Orange ≥1.25 "Acceptable", Red <1.25 "Weak")
+- [x] Fixed hardcoded Uses section fields to calculate dynamically
+- [x] Business Acquisition now links to Purchase Price field
+- [x] Working Capital calculates as balancing figure (Total Sources - Total Uses components)
+- [x] Total Uses calculates as sum of all Uses line items
+- [x] All Uses percentages update dynamically based on Total Uses
+- [x] Sources and Uses section now balances perfectly (Total Sources = Total Uses)
+- [x] Version updated to v2.01
+
 ## Completed in v1.24
 - [x] Added Sources and Uses section to Price Breakdown
 - [x] Implemented real-time updates for all Sources fields (SBA, Junior Debt, Seller Note, Down Payment)
@@ -45,10 +55,12 @@
 - [x] Consolidated duplicate SBA Loan sections
 
 ## Notes
-- `index.php` now uses modern UI (v1.24) with full mobile responsiveness
+- `index.php` now uses modern UI (v2.01) with full mobile responsiveness
 - `index.v117.php` is available as backup of previous version
 - Mobile breakpoint set at 900px for optimal phone/tablet detection
 - Auto-calculated fields use `.auto-calc-wrapper`, `.auto-calc-input`, `.auto-calc-badge` CSS classes
 - Validation display updates in real-time with color-coded success/error states
 - DSCR calculation breakdown shows: SDE - Salary - Extra Costs - CapEx / Annual Debt Service
-- Sources and Uses section provides comprehensive financing structure view
+- DSCR visual feedback: Green (≥1.5 Great), Orange (≥1.25 Acceptable), Red (<1.25 Weak)
+- Sources and Uses section provides comprehensive financing structure view with automatic balancing
+- Working Capital is calculated as balancing figure to make Total Sources = Total Uses

@@ -1,7 +1,7 @@
 <?php
 /*
  * ============================================
- * BUSINESS VALUATION CALCULATOR v1.24
+ * BUSINESS VALUATION CALCULATOR v2.01
  * ============================================
  *
  * FILE STRUCTURE:
@@ -744,11 +744,11 @@ input.auto-calc-input{background:rgba(6,182,212,0.08)!important;border:1px solid
           </div>
 
           <!-- DSCR -->
-          <div style="padding:10px;background:rgba(251,191,36,0.05);border:2px solid rgba(251,191,36,0.3);border-radius:10px;">
+          <div id="dscr_container" style="padding:10px;background:rgba(251,191,36,0.05);border:2px solid rgba(251,191,36,0.3);border-radius:10px;">
             <div style="font-size:0.625rem;color:var(--muted);margin-bottom:6px;">DSCR (Debt Coverage)</div>
             <div id="dscr_value" style="font-size:1.25rem;font-weight:700;color:#f59e0b;margin-bottom:8px;">1.48</div>
             <div id="dscr_status" style="font-size:0.5625rem;color:var(--muted);margin-bottom:8px;">Acceptable | Min: 1.25</div>
-            <div id="dscr_calculation" style="font-size:0.5625rem;color:var(--muted);line-height:1.5;border-top:1px solid rgba(251,191,36,0.2);padding-top:6px;">
+            <div id="dscr_calculation" style="font-size:0.5625rem;color:var(--muted);line-height:1.5;padding-top:6px;">
               Calculating...
             </div>
           </div>
@@ -1122,7 +1122,7 @@ input.auto-calc-input{background:rgba(6,182,212,0.08)!important;border:1px solid
 
   <div class="footer card" style="margin-top:18px;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <div>Business Valuation Calculator v1.24</div>
+      <div>Business Valuation Calculator v2.01</div>
       <div>&copy; 2025 All rights reserved Rico Vision LLC</div>
     </div>
   </div>
@@ -1316,22 +1316,44 @@ function updateResultsDisplay(metrics, inputs) {
       'Capex: -' + formatCurrency(inputs.capex);
   }
 
-  // Update DSCR
+  // Update DSCR with dynamic color coding
+  const dscrContainer = document.getElementById('dscr_container');
   const dscrEl = document.getElementById('dscr_value');
-  if (dscrEl) {
-    dscrEl.textContent = metrics.dscr.toFixed(2);
+  const dscrStatusEl = document.getElementById('dscr_status');
+
+  let status, backgroundColor, borderColor, valueColor;
+
+  if (metrics.dscr >= 1.5) {
+    // Great - Green
+    status = 'Great';
+    backgroundColor = 'rgba(16, 185, 129, 0.05)';
+    borderColor = 'rgba(16, 185, 129, 0.3)';
+    valueColor = '#10b981';
+  } else if (metrics.dscr >= 1.25) {
+    // Acceptable - Orange/Yellow
+    status = 'Acceptable';
+    backgroundColor = 'rgba(251, 191, 36, 0.05)';
+    borderColor = 'rgba(251, 191, 36, 0.3)';
+    valueColor = '#f59e0b';
+  } else {
+    // Weak - Red
+    status = 'Weak';
+    backgroundColor = 'rgba(239, 68, 68, 0.05)';
+    borderColor = 'rgba(239, 68, 68, 0.3)';
+    valueColor = '#ef4444';
   }
 
-  const dscrStatusEl = document.getElementById('dscr_status');
+  if (dscrContainer) {
+    dscrContainer.style.background = backgroundColor;
+    dscrContainer.style.border = '2px solid ' + borderColor;
+  }
+
+  if (dscrEl) {
+    dscrEl.textContent = metrics.dscr.toFixed(2);
+    dscrEl.style.color = valueColor;
+  }
+
   if (dscrStatusEl) {
-    let status;
-    if (metrics.dscr >= 1.5) {
-      status = 'Acceptable';
-    } else if (metrics.dscr >= 1.25) {
-      status = 'Acceptable';
-    } else {
-      status = 'Weak';
-    }
     dscrStatusEl.textContent = status + ' | Min: 1.25';
   }
 
@@ -1473,6 +1495,12 @@ function updateResultsDisplay(metrics, inputs) {
   }
 
   // Update Uses section
+  // Business Acquisition = Purchase Price
+  const usesBusinessAcquisitionEl = document.getElementById('uses_business_acquisition');
+  if (usesBusinessAcquisitionEl) {
+    usesBusinessAcquisitionEl.textContent = formatCurrency(inputs.price);
+  }
+
   const usesSbaGtyFeeEl = document.getElementById('uses_sba_gty_fee');
   if (usesSbaGtyFeeEl) {
     usesSbaGtyFeeEl.textContent = formatCurrency(inputs.loan_fee);
@@ -1481,6 +1509,51 @@ function updateResultsDisplay(metrics, inputs) {
   const usesTransactionExpensesEl = document.getElementById('uses_transaction_expenses');
   if (usesTransactionExpensesEl) {
     usesTransactionExpensesEl.textContent = formatCurrency(inputs.closing_costs);
+  }
+
+  // Calculate Total Uses (should equal Total Sources)
+  const realEstate = 0; // No input field, remains 0
+  const mePurchase = 0; // No input field, remains 0
+  const totalUsesBeforeWC = inputs.price + realEstate + mePurchase + inputs.closing_costs + inputs.loan_fee;
+
+  // Working Capital = Total Sources - Total Uses (before WC)
+  // This is the balancing figure
+  const workingCapital = totalDeal - totalUsesBeforeWC - inputs.other_fees;
+  const totalUses = totalUsesBeforeWC + inputs.other_fees + workingCapital;
+
+  const usesWorkingCapitalEl = document.getElementById('uses_working_capital');
+  if (usesWorkingCapitalEl) {
+    usesWorkingCapitalEl.textContent = formatCurrency(workingCapital);
+  }
+
+  const usesTotalEl = document.getElementById('uses_total');
+  if (usesTotalEl) {
+    usesTotalEl.textContent = formatCurrency(totalUses);
+  }
+
+  // Update Uses percentages
+  const usesBusinessAcquisitionPctEl = document.getElementById('uses_business_acquisition_pct');
+  if (usesBusinessAcquisitionPctEl) {
+    const pct = totalUses > 0 ? ((inputs.price / totalUses) * 100).toFixed(1) : '0.0';
+    usesBusinessAcquisitionPctEl.textContent = pct + '%';
+  }
+
+  const usesTransactionExpensesPctEl = document.getElementById('uses_transaction_expenses_pct');
+  if (usesTransactionExpensesPctEl) {
+    const pct = totalUses > 0 ? ((inputs.closing_costs / totalUses) * 100).toFixed(1) : '0.0';
+    usesTransactionExpensesPctEl.textContent = pct + '%';
+  }
+
+  const usesSbaGtyFeePctEl = document.getElementById('uses_sba_gty_fee_pct');
+  if (usesSbaGtyFeePctEl) {
+    const pct = totalUses > 0 ? ((inputs.loan_fee / totalUses) * 100).toFixed(1) : '0.0';
+    usesSbaGtyFeePctEl.textContent = pct + '%';
+  }
+
+  const usesWorkingCapitalPctEl = document.getElementById('uses_working_capital_pct');
+  if (usesWorkingCapitalPctEl) {
+    const pct = totalUses > 0 ? ((workingCapital / totalUses) * 100).toFixed(1) : '0.0';
+    usesWorkingCapitalPctEl.textContent = pct + '%';
   }
 
   // Update Payment to Seller sections
