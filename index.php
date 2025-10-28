@@ -1,7 +1,7 @@
 <?php
 /*
  * ============================================
- * BUSINESS VALUATION CALCULATOR v1.23
+ * BUSINESS VALUATION CALCULATOR v1.24
  * ============================================
  *
  * FILE STRUCTURE:
@@ -298,8 +298,8 @@ function validateAndSanitizeBusinessData($post_data) {
         'pct_seller_carry' => ['min' => 0, 'max' => 100, 'default' => 10],
         'pct_junior_debt' => ['min' => 0, 'max' => 100, 'default' => 0],
         'loan_fee' => ['min' => 0, 'max' => 10000000, 'default' => 13485],
-        'closing_costs' => ['min' => 0, 'max' => 10000000, 'default' => 15000],
-        'other_fees' => ['min' => 0, 'max' => 10000000, 'default' => 15000],
+        'closing_costs' => ['min' => 0, 'max' => 10000000, 'default' => 20000],
+        'other_fees' => ['min' => 0, 'max' => 10000000, 'default' => 0],
         'seller_duration' => ['min' => 1, 'max' => 600, 'default' => 120],
         'seller_interest' => ['min' => 0, 'max' => 100, 'default' => 7],
         'junior_duration' => ['min' => 1, 'max' => 600, 'default' => 120],
@@ -747,7 +747,10 @@ input.auto-calc-input{background:rgba(6,182,212,0.08)!important;border:1px solid
           <div style="padding:10px;background:rgba(251,191,36,0.05);border:2px solid rgba(251,191,36,0.3);border-radius:10px;">
             <div style="font-size:0.625rem;color:var(--muted);margin-bottom:6px;">DSCR (Debt Coverage)</div>
             <div id="dscr_value" style="font-size:1.25rem;font-weight:700;color:#f59e0b;margin-bottom:8px;">1.48</div>
-            <div id="dscr_status" style="font-size:0.5625rem;color:var(--muted);">Acceptable | Min: 1.25</div>
+            <div id="dscr_status" style="font-size:0.5625rem;color:var(--muted);margin-bottom:8px;">Acceptable | Min: 1.25</div>
+            <div id="dscr_calculation" style="font-size:0.5625rem;color:var(--muted);line-height:1.5;border-top:1px solid rgba(251,191,36,0.2);padding-top:6px;">
+              Calculating...
+            </div>
           </div>
         </div>
       </div>
@@ -790,41 +793,97 @@ input.auto-calc-input{background:rgba(6,182,212,0.08)!important;border:1px solid
       <div class="card" style="margin-top:10px;">
         <h3>Price Breakdown</h3>
 
-        <div style="margin-top:8px;padding:8px;background:var(--glass);border-radius:10px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <div style="font-size:0.625rem;color:var(--muted);">TOTAL PRICE</div>
-            <div style="font-size:0.875rem;color:var(--muted);">100%</div>
+        <!-- Sources and Uses Section -->
+        <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <!-- Sources Column -->
+          <div>
+            <div style="font-size:0.75rem;font-weight:700;margin-bottom:8px;color:var(--text);">Sources</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);">
+                <span style="font-size:0.625rem;color:var(--muted);">SBA / Senior Debt (incl. fees)</span>
+                <div style="text-align:right;font-size:0.6875rem;font-weight:600;">
+                  <span id="sources_sr_debt">$1,150,020</span> <span id="sources_sr_debt_pct" style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">64.3%</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);">
+                <span style="font-size:0.625rem;color:var(--muted);">Junior Debt</span>
+                <div style="text-align:right;font-size:0.6875rem;font-weight:600;">
+                  <span id="sources_junior_debt">$0</span> <span id="sources_junior_debt_pct" style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">0%</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);">
+                <span style="font-size:0.625rem;color:var(--muted);">Seller Note</span>
+                <div style="text-align:right;font-size:0.6875rem;font-weight:600;">
+                  <span id="sources_seller_note">$450,000</span> <span id="sources_seller_note_pct" style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">25.2%</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);">
+                <span style="font-size:0.625rem;font-weight:700;">Total Debt</span>
+                <div style="text-align:right;font-size:0.6875rem;font-weight:700;">
+                  <span id="sources_total_debt">$1,600,020</span> <span id="sources_total_debt_pct" style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">89.4%</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);">
+                <span style="font-size:0.625rem;color:var(--muted);">Down Payment / New Equity (10% Min.)</span>
+                <div style="text-align:right;font-size:0.6875rem;font-weight:600;">
+                  <span id="sources_new_equity">$189,000</span> <span id="sources_new_equity_pct" style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">10.6%</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-weight:700;background:var(--glass);margin-top:2px;padding:4px;">
+                <span style="font-size:0.625rem;">Total Sources</span>
+                <div style="text-align:right;font-size:0.6875rem;">
+                  <span id="sources_total">$1,789,020</span> <span style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">100%</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div id="total_price" style="font-size:1.25rem;font-weight:700;">$1,750,000</div>
-        </div>
 
-        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">
-            <span style="color:var(--muted);font-size:0.6875rem;">Down:</span>
-            <div style="text-align:right;">
-              <div id="down_amount" style="font-weight:600;font-size:0.8125rem;">$175,000</div>
-              <div id="down_pct" style="font-size:0.625rem;color:var(--muted);">10.0%</div>
-            </div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">
-            <span style="color:var(--muted);font-size:0.6875rem;">SBA Loan:</span>
-            <div style="text-align:right;">
-              <div id="sba_amount" style="font-weight:600;font-size:0.8125rem;">$1,400,000</div>
-              <div id="sba_pct" style="font-size:0.625rem;color:var(--muted);">80.0%</div>
-            </div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">
-            <span style="color:var(--muted);font-size:0.6875rem;">Junior Debt:</span>
-            <div style="text-align:right;">
-              <div id="junior_amount" style="font-weight:600;font-size:0.8125rem;">$0</div>
-              <div id="junior_pct" style="font-size:0.625rem;color:var(--muted);">0.0%</div>
-            </div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;">
-            <span style="color:var(--muted);font-size:0.6875rem;">Seller Carry:</span>
-            <div style="text-align:right;">
-              <div id="seller_amount" style="font-weight:600;font-size:0.8125rem;">$175,000</div>
-              <div id="seller_pct" style="font-size:0.625rem;color:var(--muted);">10.0%</div>
+          <!-- Uses Column -->
+          <div>
+            <div style="font-size:0.75rem;font-weight:700;margin-bottom:8px;color:var(--text);">Uses</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);">
+                <span style="font-size:0.625rem;color:var(--muted);">Business Acquisition</span>
+                <div style="text-align:right;font-size:0.6875rem;font-weight:600;">
+                  <span id="uses_business_acquisition">$1,800,000</span> <span id="uses_business_acquisition_pct" style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">100.6%</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);">
+                <span style="font-size:0.625rem;color:var(--muted);">Real Estate</span>
+                <div style="text-align:right;font-size:0.6875rem;font-weight:600;">
+                  <span id="uses_real_estate">$0</span> <span id="uses_real_estate_pct" style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">0.0%</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);">
+                <span style="font-size:0.625rem;color:var(--muted);">M&E Purchase</span>
+                <div style="text-align:right;font-size:0.6875rem;font-weight:600;">
+                  <span id="uses_me_purchase">$0</span> <span id="uses_me_purchase_pct" style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">0.0%</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);">
+                <span style="font-size:0.625rem;color:var(--muted);">Transaction Expenses</span>
+                <div style="text-align:right;font-size:0.6875rem;font-weight:600;">
+                  <span id="uses_transaction_expenses">$20,000</span> <span id="uses_transaction_expenses_pct" style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">1.1%</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);">
+                <span style="font-size:0.625rem;color:var(--muted);">SBA Gty Fee</span>
+                <div style="text-align:right;font-size:0.6875rem;font-weight:600;">
+                  <span id="uses_sba_gty_fee">$34,563</span> <span id="uses_sba_gty_fee_pct" style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">1.9%</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);">
+                <span style="font-size:0.625rem;color:var(--muted);">Working Capital</span>
+                <div style="text-align:right;font-size:0.6875rem;font-weight:600;">
+                  <span id="uses_working_capital">-$65,543</span> <span id="uses_working_capital_pct" style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">-3.7%</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-weight:700;background:var(--glass);margin-top:2px;padding:4px;">
+                <span style="font-size:0.625rem;">Total Uses</span>
+                <div style="text-align:right;font-size:0.6875rem;">
+                  <span id="uses_total">$1,789,020</span> <span style="font-size:0.5625rem;color:var(--muted);margin-left:6px;">100%</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -848,14 +907,14 @@ input.auto-calc-input{background:rgba(6,182,212,0.08)!important;border:1px solid
 
       <div class="form-row">
         <div class="field">
-          <label for="loan_fee">Loan Fee:</label>
+          <label for="loan_fee">SBA Gty Fee:</label>
           <div class="input-group">
             <span class="prefix">$</span>
             <input id="loan_fee" name="loan_fee" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['loan_fee'] ?? $_POST['loan_fee'] ?? '13485'); ?>">
           </div>
         </div>
         <div class="field">
-          <label for="closing_costs">Closing Costs:</label>
+          <label for="closing_costs">Transaction Expenses:</label>
           <div class="input-group">
             <span class="prefix">$</span>
             <input id="closing_costs" name="closing_costs" type="number" step="1" value="<?php echo htmlspecialchars($loadedData['closing_costs'] ?? $_POST['closing_costs'] ?? '15000'); ?>">
@@ -1063,8 +1122,8 @@ input.auto-calc-input{background:rgba(6,182,212,0.08)!important;border:1px solid
 
   <div class="footer card" style="margin-top:18px;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <div>Business Valuation Calculator v1.23</div>
-      <div>&copy; 2025 All rights reserved.</div>
+      <div>Business Valuation Calculator v1.24</div>
+      <div>&copy; 2025 All rights reserved Rico Vision LLC</div>
     </div>
   </div>
 </div>
@@ -1276,10 +1335,29 @@ function updateResultsDisplay(metrics, inputs) {
     dscrStatusEl.textContent = status + ' | Min: 1.25';
   }
 
+  // Update DSCR Calculation Details
+  const dscrCalcEl = document.getElementById('dscr_calculation');
+  if (dscrCalcEl) {
+    const netOperatingIncome = inputs.sde - inputs.optional_salary - inputs.extra_costs - inputs.capex;
+    const totalDebtService = (metrics.sba_monthly_payment * 12) + (metrics.seller_monthly_payment * 12) + (metrics.junior_monthly_payment * 12);
+
+    dscrCalcEl.innerHTML =
+      'SDE: ' + formatCurrency(inputs.sde) + '<br>' +
+      'Salary: -' + formatCurrency(inputs.optional_salary) + '<br>' +
+      'Extra Costs: -' + formatCurrency(inputs.extra_costs) + '<br>' +
+      'CapEx: -' + formatCurrency(inputs.capex) + '<br>' +
+      '<strong>Net Operating Income: ' + formatCurrency(netOperatingIncome) + '</strong><br>' +
+      'Annual Debt Service: ' + formatCurrency(totalDebtService) + '<br>' +
+      '<strong>DSCR = ' + formatCurrency(netOperatingIncome) + ' ÷ ' + formatCurrency(totalDebtService) + ' = ' + metrics.dscr.toFixed(2) + '</strong>';
+  }
+
   // Update Price Breakdown
+  // Calculate total deal including fees
+  const totalDeal = metrics.down_payment + metrics.sba_loan_amount + metrics.junior_debt + metrics.seller_carry;
+
   const totalPriceEl = document.getElementById('total_price');
   if (totalPriceEl) {
-    totalPriceEl.textContent = formatCurrency(inputs.price);
+    totalPriceEl.textContent = formatCurrency(totalDeal);
   }
 
   const downAmountEl = document.getElementById('down_amount');
@@ -1289,7 +1367,7 @@ function updateResultsDisplay(metrics, inputs) {
 
   const downPctEl = document.getElementById('down_pct');
   if (downPctEl) {
-    const pct = inputs.price > 0 ? ((metrics.down_payment / inputs.price) * 100).toFixed(1) : '0.0';
+    const pct = totalDeal > 0 ? ((metrics.down_payment / totalDeal) * 100).toFixed(1) : '0.0';
     downPctEl.textContent = pct + '%';
   }
 
@@ -1300,7 +1378,7 @@ function updateResultsDisplay(metrics, inputs) {
 
   const sbaPctEl = document.getElementById('sba_pct');
   if (sbaPctEl) {
-    const pct = inputs.price > 0 ? ((metrics.sba_loan_amount / inputs.price) * 100).toFixed(1) : '0.0';
+    const pct = totalDeal > 0 ? ((metrics.sba_loan_amount / totalDeal) * 100).toFixed(1) : '0.0';
     sbaPctEl.textContent = pct + '%';
   }
 
@@ -1311,7 +1389,7 @@ function updateResultsDisplay(metrics, inputs) {
 
   const juniorPctEl = document.getElementById('junior_pct');
   if (juniorPctEl) {
-    const pct = inputs.price > 0 ? ((metrics.junior_debt / inputs.price) * 100).toFixed(1) : '0.0';
+    const pct = totalDeal > 0 ? ((metrics.junior_debt / totalDeal) * 100).toFixed(1) : '0.0';
     juniorPctEl.textContent = pct + '%';
   }
 
@@ -1322,8 +1400,87 @@ function updateResultsDisplay(metrics, inputs) {
 
   const sellerPctEl = document.getElementById('seller_pct');
   if (sellerPctEl) {
-    const pct = inputs.price > 0 ? ((metrics.seller_carry / inputs.price) * 100).toFixed(1) : '0.0';
+    const pct = totalDeal > 0 ? ((metrics.seller_carry / totalDeal) * 100).toFixed(1) : '0.0';
     sellerPctEl.textContent = pct + '%';
+  }
+
+  // Update Sources section - SBA
+  const sourcesSrDebtEl = document.getElementById('sources_sr_debt');
+  if (sourcesSrDebtEl) {
+    sourcesSrDebtEl.textContent = formatCurrency(metrics.sba_loan_amount);
+  }
+
+  const sourcesSrDebtPctEl = document.getElementById('sources_sr_debt_pct');
+  if (sourcesSrDebtPctEl) {
+    const pct = totalDeal > 0 ? ((metrics.sba_loan_amount / totalDeal) * 100).toFixed(1) : '0.0';
+    sourcesSrDebtPctEl.textContent = pct + '%';
+  }
+
+  // Update Sources section - Junior Debt
+  const sourcesJuniorDebtEl = document.getElementById('sources_junior_debt');
+  if (sourcesJuniorDebtEl) {
+    sourcesJuniorDebtEl.textContent = formatCurrency(metrics.junior_debt);
+  }
+
+  const sourcesJuniorDebtPctEl = document.getElementById('sources_junior_debt_pct');
+  if (sourcesJuniorDebtPctEl) {
+    const pct = totalDeal > 0 ? ((metrics.junior_debt / totalDeal) * 100).toFixed(1) : '0.0';
+    sourcesJuniorDebtPctEl.textContent = pct + '%';
+  }
+
+  // Update Sources section - Seller Note
+  const sourcesSellerNoteEl = document.getElementById('sources_seller_note');
+  if (sourcesSellerNoteEl) {
+    sourcesSellerNoteEl.textContent = formatCurrency(metrics.seller_carry);
+  }
+
+  const sourcesSellerNotePctEl = document.getElementById('sources_seller_note_pct');
+  if (sourcesSellerNotePctEl) {
+    const pct = totalDeal > 0 ? ((metrics.seller_carry / totalDeal) * 100).toFixed(1) : '0.0';
+    sourcesSellerNotePctEl.textContent = pct + '%';
+  }
+
+  // Update Sources section - Total Debt
+  const sourcesTotalDebtEl = document.getElementById('sources_total_debt');
+  if (sourcesTotalDebtEl) {
+    const totalDebt = metrics.sba_loan_amount + metrics.junior_debt + metrics.seller_carry;
+    sourcesTotalDebtEl.textContent = formatCurrency(totalDebt);
+  }
+
+  const sourcesTotalDebtPctEl = document.getElementById('sources_total_debt_pct');
+  if (sourcesTotalDebtPctEl) {
+    const totalDebt = metrics.sba_loan_amount + metrics.junior_debt + metrics.seller_carry;
+    const pct = totalDeal > 0 ? ((totalDebt / totalDeal) * 100).toFixed(1) : '0.0';
+    sourcesTotalDebtPctEl.textContent = pct + '%';
+  }
+
+  // Update Sources section - Down Payment
+  const sourcesNewEquityEl = document.getElementById('sources_new_equity');
+  if (sourcesNewEquityEl) {
+    sourcesNewEquityEl.textContent = formatCurrency(metrics.down_payment);
+  }
+
+  const sourcesNewEquityPctEl = document.getElementById('sources_new_equity_pct');
+  if (sourcesNewEquityPctEl) {
+    const pct = totalDeal > 0 ? ((metrics.down_payment / totalDeal) * 100).toFixed(1) : '0.0';
+    sourcesNewEquityPctEl.textContent = pct + '%';
+  }
+
+  // Update Sources section - Total Sources
+  const sourcesTotalEl = document.getElementById('sources_total');
+  if (sourcesTotalEl) {
+    sourcesTotalEl.textContent = formatCurrency(totalDeal);
+  }
+
+  // Update Uses section
+  const usesSbaGtyFeeEl = document.getElementById('uses_sba_gty_fee');
+  if (usesSbaGtyFeeEl) {
+    usesSbaGtyFeeEl.textContent = formatCurrency(inputs.loan_fee);
+  }
+
+  const usesTransactionExpensesEl = document.getElementById('uses_transaction_expenses');
+  if (usesTransactionExpensesEl) {
+    usesTransactionExpensesEl.textContent = formatCurrency(inputs.closing_costs);
   }
 
   // Update Payment to Seller sections

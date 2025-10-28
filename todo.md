@@ -7,6 +7,16 @@
   - [ ] Allow range: 1 year up to (SBA loan years - 1).
   - [ ] Balloon input should validate against current SBA loan term.
 
+## Completed in v1.24
+- [x] Added Sources and Uses section to Price Breakdown
+- [x] Implemented real-time updates for all Sources fields (SBA, Junior Debt, Seller Note, Down Payment)
+- [x] Linked SBA Gty Fee and Transaction Expenses to Uses section
+- [x] Added detailed DSCR calculation breakdown display
+- [x] Renamed field labels: "SBA / Senior Debt", "Down Payment / New Equity", "Junior Debt"
+- [x] Removed duplicate price breakdown fields (consolidated into Sources/Uses)
+- [x] Updated footer to include "Rico Vision LLC"
+- [x] Version updated to v1.24
+
 ## Completed in v1.23
 - [x] Auto-calculated field styling system (reusable CSS classes)
 - [x] Applied auto-calc styling to all readonly fields (Multiple, Down Payment, Seller Carry, Junior Debt, SBA fields)
@@ -35,8 +45,10 @@
 - [x] Consolidated duplicate SBA Loan sections
 
 ## Notes
-- `index.php` now uses modern UI (v1.23) with full mobile responsiveness
+- `index.php` now uses modern UI (v1.24) with full mobile responsiveness
 - `index.v117.php` is available as backup of previous version
 - Mobile breakpoint set at 900px for optimal phone/tablet detection
 - Auto-calculated fields use `.auto-calc-wrapper`, `.auto-calc-input`, `.auto-calc-badge` CSS classes
 - Validation display updates in real-time with color-coded success/error states
+- DSCR calculation breakdown shows: SDE - Salary - Extra Costs - CapEx / Annual Debt Service
+- Sources and Uses section provides comprehensive financing structure view
